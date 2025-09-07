@@ -11,6 +11,8 @@ import re
 import requests
 from gspread_formatting import cellFormat, format_cell_range, color, batch_updater
 import time
+from keep_alive import keep_alive
+keep_alive()
 
 # === Team data ===
 teams = {
