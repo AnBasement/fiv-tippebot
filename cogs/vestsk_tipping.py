@@ -26,10 +26,13 @@ class VestskTipping(commands.Cog):
         if isinstance(error, CheckFailure):
             await ctx.send("Kanskje hvis du spør veldig pent så kan du få lov te å bruke botten.")
 
+    # === kamper ===
     @commands.command()
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def kamper(self, ctx, uke: int = None):
-        """Henter NFL-kamper for en gitt uke (kun admin)"""
+        await self._kamper_impl(ctx, uke)
+
+    async def _kamper_impl(self, ctx, uke: int = None):
         season = datetime.now().year
         url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
                if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
@@ -48,10 +51,13 @@ class VestskTipping(commands.Cog):
             away_team = away["team"]["displayName"]
             await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ {home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
 
+    # === eksport ===
     @commands.command(name="eksporter")
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def export(self, ctx, uke: int = None):
-        """Eksporter reaksjoner til Sheet i grid-format (kun admin)"""
+        await self._export_impl(ctx, uke)
+
+    async def _export_impl(self, ctx, uke: int = None):
         sheet = get_sheet()
         channel = ctx.channel
 
@@ -113,15 +119,17 @@ class VestskTipping(commands.Cog):
         else:
             await ctx.send("Ingen verdier å oppdatere")
 
+    # === resultater ===
     @commands.command(name="resultater")
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def resultater(self, ctx, uke: int = None):
-        """Sjekker tippinger og oppdaterer Sheet og Discord"""
+        await self._resultater_impl(ctx, uke)
+
+    async def _resultater_impl(self, ctx, uke: int = None):
         sheet = get_sheet()
         norsk_tz = pytz.timezone("Europe/Oslo")
         season = datetime.now(norsk_tz).year
 
-        # Hent kamper fra API
         url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
         if uke:
             url += f"?dates={season}&seasontype=2&week={uke}"
@@ -132,7 +140,6 @@ class VestskTipping(commands.Cog):
             await ctx.send("Fant ingen kamper")
             return
 
-        # Lag kampkode -> vinner mapping
         kamp_resultater = {}
         for ev in events:
             comps = ev["competitions"][0]["competitors"]
@@ -152,7 +159,7 @@ class VestskTipping(commands.Cog):
                 kamp_resultater[kampkode] = "Uavgjort"
 
         id_row = sheet.row_values(2)[1:]
-        players = {id_row[i]: i+2 for i in range(len(id_row))}  # B=2
+        players = {id_row[i]: i+2 for i in range(len(id_row))}
         num_players = len(players)
 
         sheet_rows = sheet.get_all_values()[2:]
@@ -197,7 +204,7 @@ class VestskTipping(commands.Cog):
 
                 await asyncio.sleep(1.5)
 
-        # Skriv ukespoeng
+        # Ukespoeng
         for idx, poeng in enumerate(uke_poeng, start=2):
             try:
                 sheet.update_cell(uke_total_row, idx, poeng)
@@ -205,7 +212,7 @@ class VestskTipping(commands.Cog):
             except Exception as e:
                 print(f"[RESULTATER] FEIL ved ukespoeng, kolonne {idx}: {e}")
 
-        # Skriv sesongpoeng
+        # Sesongpoeng
         for idx, discord_id in enumerate(players.keys(), start=2):
             try:
                 prev = sheet.cell(sesong_total_row, idx).value
@@ -215,7 +222,7 @@ class VestskTipping(commands.Cog):
             except Exception as e:
                 print(f"[RESULTATER] FEIL ved sesongpoeng, kolonne {idx}: {e}")
 
-        # Lag Discord-oversikt
+        # Discord-melding
         header_row = sheet.row_values(1)[1:1+num_players]
         discord_msg = []
         for idx, name in enumerate(header_row, start=2):
@@ -238,6 +245,7 @@ class VestskTipping(commands.Cog):
         lines.append("`")
         await ctx.send("\n".join(lines))
         await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert.")
+
 
 async def setup(bot):
     await bot.add_cog(VestskTipping(bot))
