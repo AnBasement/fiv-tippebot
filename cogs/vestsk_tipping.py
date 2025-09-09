@@ -239,5 +239,5 @@ class VestskTipping(commands.Cog):
         await ctx.send("\n".join(lines))
         await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert.")
 
-def setup(bot):
-    bot.add_cog(VestskTipping(bot))
+async def setup(bot):
+    await bot.add_cog(VestskTipping(bot))
