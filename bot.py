@@ -13,6 +13,7 @@ import requests
 from gspread_formatting import cellFormat, format_cell_range, color, batch_updater
 import time
 from keep_alive import keep_alive
+import asyncio
 keep_alive()
 
 # === Team data ===
@@ -119,7 +120,7 @@ async def kamper(ctx, uke: int = None):
     """Henter NFL-kamper for en gitt uke (kun admin)"""
     import requests
     season = datetime.now().year
-    url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week={uke}&season={season}&seasontype=2"
+    url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
            if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
     data = requests.get(url).json()
     events = data.get("events", [])
@@ -219,9 +220,8 @@ async def export(ctx, uke: int = None):
 @bot.command(name="resultater")
 @admin_only()
 async def resultater(ctx, uke: int = None):
-    """Sjekker tippinger, farger riktig/feil/manglende, summerer ukes- og sesongpoeng"""
+    """Sjekker tippinger, farger riktig/feil/manglende, summerer ukes- og sesongpoeng, og poster oversikt i Discord"""
     import time
-
     norsk_tz = pytz.timezone("Europe/Oslo")
     season = datetime.now(norsk_tz).year
 
@@ -302,7 +302,6 @@ async def resultater(ctx, uke: int = None):
             else:
                 gyldige_svar.append("Uavgjort")
 
-
             # DEBUG
             print(f"[DEBUG] Rad {row_idx} Kol {col_idx}: Sheet='{cell_value}' | API='{riktig_vinner}' | Gyldige='{gyldige_svar}'")
 
@@ -323,7 +322,7 @@ async def resultater(ctx, uke: int = None):
             except Exception as e:
                 print(f"[RESULTATER] FEIL ved celle {row_idx},{col_idx}: {e}")
 
-            time.sleep(1.2)
+            await asyncio.sleep(1.2)
 
         print(f"[RESULTATER] Ferdig med kamp {idx+1}/{len(sheet_kamper)}")
 
@@ -331,7 +330,7 @@ async def resultater(ctx, uke: int = None):
     for idx, poeng in enumerate(uke_poeng, start=2):
         try:
             sheet.update_cell(uke_total_row, idx, poeng)
-            time.sleep(1.2)
+            await asyncio.sleep(1.2)
         except Exception as e:
             print(f"[RESULTATER] FEIL ved ukespoeng, kolonne {idx}: {e}")
 
@@ -341,11 +340,37 @@ async def resultater(ctx, uke: int = None):
             prev = sheet.cell(sesong_total_row, idx).value
             prev_val = int(prev) if prev and prev.isdigit() else 0
             sheet.update_cell(sesong_total_row, idx, prev_val + uke_poeng[idx-2])
-            time.sleep(1.2)
+            await asyncio.sleep(1.2)
         except Exception as e:
             print(f"[RESULTATER] FEIL ved sesongpoeng, kolonne {idx}: {e}")
 
-    await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert i Sheets.")
+    # === Lag poengoversikt for Discord med kodeblokk ===
+    header_row = sheet.row_values(1)[1:1+num_players]  # B-H eller så mange spillere
+    discord_msg = []
+
+    for idx, name in enumerate(header_row, start=2):
+        uke_p = uke_poeng[idx-2]
+        sesong_p_cell = sheet.cell(sesong_total_row, idx).value
+        sesong_p = int(sesong_p_cell) if sesong_p_cell and sesong_p_cell.isdigit() else 0
+        discord_msg.append((name, uke_p, sesong_p))
+
+    # Formater ukespoeng
+    discord_msg.sort(key=lambda x: x[1], reverse=True)
+    lines = [f"`Poeng for uke {uke if uke else 'nåværende'}:"]
+    for i, (name, uke_p, _) in enumerate(discord_msg, start=1):
+        lines.append(f"{i}. {name:<10} {uke_p}")
+
+    # Formater sesongpoeng
+    lines.append("")  # blank linje mellom
+    lines.append("Sesongtotal:")
+    discord_msg.sort(key=lambda x: x[2], reverse=True)
+    for i, (name, _, sesong_p) in enumerate(discord_msg, start=1):
+        lines.append(f"{i}. {name:<10} {sesong_p}")
+
+    lines.append("`")  # slutt kodeblokk
+    await ctx.send("\n".join(lines))
+
+    await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert.")
 
 @bot.command()
 async def ping(ctx):
