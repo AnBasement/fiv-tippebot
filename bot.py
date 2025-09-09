@@ -150,12 +150,12 @@ async def export(ctx, uke: int = None):
     players = {id_row[i]: i for i in range(len(id_row))}
     num_players = len(players)
 
-    # Startdato for uken (onsdag)
+    # Startdato for uken (tirsdag kl. 10:00)
     norsk_tz = pytz.timezone("Europe/Oslo")
     now = datetime.now(norsk_tz)
-    days_since_wed = (now.weekday() - 2) % 7
-    start_of_week = now - timedelta(days=days_since_wed)
-    start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    days_since_tue = (now.weekday() - 1) % 7  # 1 = tirsdag
+    start_of_week = now - timedelta(days=days_since_tue)
+    start_of_week = start_of_week.replace(hour=10, minute=0, second=0, microsecond=0)
 
     # Emoji til team short-navn
     emoji_to_team_short = {v: k for k, v in team_emojis.items()}
