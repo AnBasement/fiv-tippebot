@@ -228,7 +228,7 @@ async def resultater(ctx, uke: int = None):
     # Hent kamper fra API
     url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     if uke:
-        url += f"?week={uke}&season={season}&seasontype=2"
+        url += f"?dates={season}&seasontype=2&week={uke}"
 
     data = requests.get(url).json()
     events = data.get("events", [])
