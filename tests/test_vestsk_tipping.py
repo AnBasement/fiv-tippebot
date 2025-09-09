@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from cogs.vestsk_tipping import VestskTipping
+from datetime import datetime, timedelta, time
+import pytz
 
 @pytest.mark.asyncio
 async def test_resultater_mocked(monkeypatch):
@@ -21,7 +23,11 @@ async def test_resultater_mocked(monkeypatch):
     monkeypatch.setattr("cogs.vestsk_tipping.requests.get", lambda *a, **kw: DummyResp())
 
     bot = MagicMock()
-    cog = VestskTipping(bot)
+    cog = VestskTipping.__new__(VestskTipping)  # hopp over __init__
+    cog.bot = bot
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    cog.last_reminder_week = None
+    cog.last_reminder_sunday = None
 
     class DummyChannel:
         def __init__(self):
@@ -37,5 +43,44 @@ async def test_resultater_mocked(monkeypatch):
 
     ctx = DummyCtx()
     await cog._resultater_impl(ctx)
-    # Sjekk at meldingen om ingen kamper sendes
     assert any("Fant ingen kamper" in m for m in ctx.sent_messages)
+
+@pytest.mark.asyncio
+async def test_send_reminders(monkeypatch):
+    bot = MagicMock()
+    channel_mock = AsyncMock()
+    bot.get_channel = MagicMock(return_value=channel_mock)
+
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.bot = bot
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    cog.last_reminder_week = None
+    cog.last_reminder_sunday = None
+
+    # Første kamp i uka (mandag)
+    now_monday = datetime(2025, 9, 8, 9, 50, tzinfo=cog.norsk_tz)  # Mandag
+    monday_game = {
+        "date": (now_monday + timedelta(minutes=10)).isoformat(),
+        "competitions": [{"competitors": [
+            {"homeAway": "home", "team": {"displayName": "HomeMon"}},
+            {"homeAway": "away", "team": {"displayName": "AwayMon"}}
+        ]}]
+    }
+
+    await cog._send_reminders(now_monday, [monday_game], channel_mock)
+    assert channel_mock.send.call_count == 1
+    assert "RAUÅ I GIR" in channel_mock.send.call_args[0][0]
+
+    # Første søndagskamp
+    now_sunday = datetime(2025, 9, 14, 9, 50, tzinfo=cog.norsk_tz)  # Søndag
+    sunday_game = {
+        "date": (now_sunday + timedelta(minutes=10)).isoformat(),
+        "competitions": [{"competitors": [
+            {"homeAway": "home", "team": {"displayName": "HomeSun"}},
+            {"homeAway": "away", "team": {"displayName": "AwaySun"}}
+        ]}]
+    }
+
+    await cog._send_reminders(now_sunday, [sunday_game], channel_mock)
+    assert channel_mock.send.call_count == 2
+    assert "Early window" in channel_mock.send.call_args[0][0]

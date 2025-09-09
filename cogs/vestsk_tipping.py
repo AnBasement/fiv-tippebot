@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ext.commands import CheckFailure
 import requests
 from datetime import datetime, timedelta
@@ -11,12 +11,23 @@ import os
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
 from cogs.sheets import get_sheet, get_players, green_format, red_format, yellow_format, format_cell
 
+CHANNEL_ID = 752538512250765314 
+
 class VestskTipping(commands.Cog):
-    """Kommandoer for Vestsk tippelek"""
+    """Kommandoer for Vestsk Tipping"""
 
     def __init__(self, bot):
         self.bot = bot
         self.ADMIN_IDS = tuple(os.getenv("ADMIN_IDS", "").split(","))
+
+        # Sporer påminnelser
+        self.last_reminder_week = None
+        self.last_reminder_sunday = None
+        self.norsk_tz = pytz.timezone("Europe/Oslo")
+        self.reminder_loop.start()
+
+    def cog_unload(self):
+        self.reminder_loop.cancel()
 
     def admin_only(self):
         return commands.check(lambda ctx: str(ctx.author.id) in self.ADMIN_IDS)
@@ -50,6 +61,64 @@ class VestskTipping(commands.Cog):
             home_team = home["team"]["displayName"]
             away_team = away["team"]["displayName"]
             await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ {home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
+
+    # === reminders task ===
+    async def _send_reminders(self, now, events, channel):
+        """Send reminders for first game of the week and first Sunday game."""
+        # === Første kamp i uka ===
+        if events:
+            first_game = datetime.fromisoformat(events[0]["date"]).astimezone(self.norsk_tz)
+            week_num = now.isocalendar()[1]
+            if self.last_reminder_week != week_num:
+                if 0 <= (first_game - now).total_seconds() <= 3600:
+                    await channel.send(f"@everyone RAUÅ I GIR, ukå begynne snart så sjekk #vestsk-tipping: {self._format_event(events[0])}")
+                    self.last_reminder_week = week_num
+
+        # === Første kamp på søndag ===
+        sunday_events = [ev for ev in events if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6]
+        if sunday_events:
+            sunday_events.sort(key=lambda ev: ev.get("date"))
+            first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
+            if self.last_reminder_sunday != first_sunday_game.date():
+                if 0 <= (first_sunday_game - now).total_seconds() <= 3600:
+                    await channel.send(f"@everyone  Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}")
+                    self.last_reminder_sunday = first_sunday_game.date()
+
+
+    @tasks.loop(minutes=5)
+    async def reminder_loop(self):
+        await self.bot.wait_until_ready()
+        channel = self.bot.get_channel(CHANNEL_ID)
+        if not channel:
+            return
+
+        now = datetime.now(self.norsk_tz)
+
+        # Hent ukens kamper
+        season = now.year
+        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+        data = requests.get(url).json()
+        events = data.get("events", [])
+        if not events:
+            return
+
+        events.sort(key=lambda ev: ev.get("date"))
+
+        await self._send_reminders(now, events, channel)
+
+
+    @reminder_loop.before_loop
+    async def before_reminder_loop(self):
+        await self.bot.wait_until_ready()
+
+
+    def _format_event(self, ev):
+        comps = ev["competitions"][0]["competitors"]
+        home = next(c for c in comps if c["homeAway"] == "home")
+        away = next(c for c in comps if c["homeAway"] == "away")
+        home_team = home["team"]["displayName"]
+        away_team = away["team"]["displayName"]
+        return f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ {home_team} {teams.get(home_team, {'emoji':''})['emoji']}"
 
     # === eksport ===
     @commands.command(name="eksporter")
