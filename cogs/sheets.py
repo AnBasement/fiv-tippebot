@@ -1,12 +1,26 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread_formatting import cellFormat, format_cell_range, color
+import os
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
+
+def get_creds():
+    """Returnerer credentials eller None hvis fil mangler (brukes i tester/CI)."""
+    if not os.path.exists("credentials.json"):
+        return None
+    return ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+
+def get_client():
+    creds = get_creds()
+    if creds is None:
+        return None
+    return gspread.authorize(creds)
 
 def get_sheet():
+    client = get_client()
+    if client is None:
+        return None  # Testene vil mocke dette
     return client.open("Vestsk Tipping").sheet1
 
 def get_players(sheet):
