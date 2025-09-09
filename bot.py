@@ -1,7 +1,6 @@
 import os
 import discord
 from discord.ext import commands
-from discord.ext import commands
 from discord.ext.commands import CheckFailure
 from dotenv import load_dotenv
 import gspread
@@ -10,8 +9,7 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import requests
-from gspread_formatting import cellFormat, format_cell_range, color, batch_updater
-import time
+from gspread_formatting import cellFormat, format_cell_range, color
 from keep_alive import keep_alive
 import asyncio
 keep_alive()
@@ -94,20 +92,6 @@ async def on_command_error(ctx, error):
     if isinstance(error, CheckFailure):
         await ctx.send("Kanskje hvis du spør veldig pent så kan du få lov te å bruke botten.")
 
-# === Helpers ===
-def get_players(sheet):
-    id_row = sheet.row_values(2)
-    return {id_row[i]: i for i in range(len(id_row))}
-
-def msg_to_kampkode(msg):
-    clean_text = re.sub(r'<:.+?:\d+>', '', msg.content).strip()
-    comps = clean_text.split("@")
-    if len(comps) == 2:
-        away = teams.get(comps[0].strip(), {"short": comps[0].strip()})["short"]
-        home = teams.get(comps[1].strip(), {"short": comps[1].strip()})["short"]
-        return f"{away}@{home}"
-    return clean_text
-
 # === Events ===
 @bot.event
 async def on_ready():
@@ -118,7 +102,6 @@ async def on_ready():
 @admin_only()
 async def kamper(ctx, uke: int = None):
     """Henter NFL-kamper for en gitt uke (kun admin)"""
-    import requests
     season = datetime.now().year
     url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
            if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
