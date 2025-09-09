@@ -322,7 +322,7 @@ async def resultater(ctx, uke: int = None):
             except Exception as e:
                 print(f"[RESULTATER] FEIL ved celle {row_idx},{col_idx}: {e}")
 
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(1.5)
 
         print(f"[RESULTATER] Ferdig med kamp {idx+1}/{len(sheet_kamper)}")
 
@@ -330,7 +330,7 @@ async def resultater(ctx, uke: int = None):
     for idx, poeng in enumerate(uke_poeng, start=2):
         try:
             sheet.update_cell(uke_total_row, idx, poeng)
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(1.5)
         except Exception as e:
             print(f"[RESULTATER] FEIL ved ukespoeng, kolonne {idx}: {e}")
 
@@ -340,7 +340,7 @@ async def resultater(ctx, uke: int = None):
             prev = sheet.cell(sesong_total_row, idx).value
             prev_val = int(prev) if prev and prev.isdigit() else 0
             sheet.update_cell(sesong_total_row, idx, prev_val + uke_poeng[idx-2])
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(1.5)
         except Exception as e:
             print(f"[RESULTATER] FEIL ved sesongpoeng, kolonne {idx}: {e}")
 
