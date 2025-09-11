@@ -57,24 +57,16 @@ async def test_send_reminders(monkeypatch):
     cog.last_reminder_week = None
     cog.last_reminder_sunday = None
 
-    # Første kamp i uka (mandag)
-    now_monday = datetime(2025, 9, 8, 9, 50, tzinfo=cog.norsk_tz)  # Mandag
-    monday_game = {
-        "date": (now_monday + timedelta(minutes=10)).isoformat(),
-        "competitions": [{"competitors": [
-            {"homeAway": "home", "team": {"displayName": "HomeMon"}},
-            {"homeAway": "away", "team": {"displayName": "AwayMon"}}
-        ]}]
-    }
-
-    await cog._send_reminders(now_monday, [monday_game], channel_mock)
+    # === Torsdag kl. 18:00 ===
+    now_thursday = datetime(2025, 9, 11, 18, 5, tzinfo=cog.norsk_tz)  # torsdag 18:05
+    await cog._send_reminders(now_thursday, [], channel_mock)
     assert channel_mock.send.call_count == 1
     assert "RAUÅ I GIR" in channel_mock.send.call_args[0][0]
 
-    # Første søndagskamp
-    now_sunday = datetime(2025, 9, 14, 9, 50, tzinfo=cog.norsk_tz)  # Søndag
+    # === Første søndagskamp, 1 time før ===
+    now_sunday = datetime(2025, 9, 14, 12, 0, tzinfo=cog.norsk_tz)  # søndag 12:00
     sunday_game = {
-        "date": (now_sunday + timedelta(minutes=10)).isoformat(),
+        "date": (now_sunday + timedelta(minutes=60)).isoformat(),  # kickoff 13:00
         "competitions": [{"competitors": [
             {"homeAway": "home", "team": {"displayName": "HomeSun"}},
             {"homeAway": "away", "team": {"displayName": "AwaySun"}}
