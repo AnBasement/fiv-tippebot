@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from cogs.vestsk_tipping import VestskTipping
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 import pytz
 
 @pytest.mark.asyncio
@@ -45,8 +45,9 @@ async def test_resultater_mocked(monkeypatch):
     await cog._resultater_impl(ctx)
     assert any("Fant ingen kamper" in m for m in ctx.sent_messages)
 
+
 @pytest.mark.asyncio
-async def test_send_reminders(monkeypatch):
+async def test_send_sunday_reminder(monkeypatch):
     bot = MagicMock()
     channel_mock = AsyncMock()
     bot.get_channel = MagicMock(return_value=channel_mock)
@@ -54,16 +55,9 @@ async def test_send_reminders(monkeypatch):
     cog = VestskTipping.__new__(VestskTipping)
     cog.bot = bot
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
-    cog.last_reminder_week = None
     cog.last_reminder_sunday = None
 
-    # === Torsdag kl. 18:00 ===
-    now_thursday = datetime(2025, 9, 11, 18, 5, tzinfo=cog.norsk_tz)  # torsdag 18:05
-    await cog._send_reminders(now_thursday, [], channel_mock)
-    assert channel_mock.send.call_count == 1
-    assert "RAUÅ I GIR" in channel_mock.send.call_args[0][0]
-
-    # === Første søndagskamp, 1 time før ===
+    # Første søndagskamp, 1 time før
     now_sunday = datetime(2025, 9, 14, 12, 0, tzinfo=cog.norsk_tz)  # søndag 12:00
     sunday_game = {
         "date": (now_sunday + timedelta(minutes=60)).isoformat(),  # kickoff 13:00
@@ -74,5 +68,7 @@ async def test_send_reminders(monkeypatch):
     }
 
     await cog._send_reminders(now_sunday, [sunday_game], channel_mock)
-    assert channel_mock.send.call_count == 2
+
+    # Sjekk at påminnelsen ble sendt
+    assert channel_mock.send.call_count == 1
     assert "Early window" in channel_mock.send.call_args[0][0]
