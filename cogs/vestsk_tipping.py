@@ -19,15 +19,14 @@ class VestskTipping(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ADMIN_IDS = tuple(os.getenv("ADMIN_IDS", "").split(","))
-
-        # Sporer påminnelser
-        self.last_reminder_week = None
-        self.last_reminder_sunday = None
         self.norsk_tz = pytz.timezone("Europe/Oslo")
-        self.reminder_loop.start()
+        now = datetime.now(self.norsk_tz)
+        self.last_reminder_week = now.isocalendar()[1]
+        self.last_reminder_sunday = now.date()
+        self.reminder_task = self.bot.loop.create_task(self.reminder_scheduler())
 
     def cog_unload(self):
-        self.reminder_loop.cancel()
+        self.reminder_task.cancel()
 
     def admin_only(self):
         return commands.check(lambda ctx: str(ctx.author.id) in self.ADMIN_IDS)
@@ -64,76 +63,101 @@ class VestskTipping(commands.Cog):
 
     # === reminders task ===
     async def _send_reminders(self, now, events, channel):
-        """Send påminnelse torsdag 18:00 (±15 min) og søndag før første kamp."""
+        """Send søndagspåminnelse før første kamp."""
         week_num = now.isocalendar()[1]
 
-        # === Guard: botten kjører kun i passende tidsvindu istedenfor døgnet rundt ===
-        torsdag_ok = (...)
-        søndag_ok = (...)
-        if not (torsdag_ok or søndag_ok):
-            print(f"[DEBUG] Utenfor reminder-vindu ({now})")
+        # Kun søndagspåminnelse
+        if now.weekday() != 6 or not events:
             return
 
-        # === Torsdag kl. 18:00 norsk tid ===
-        if torsdag_ok:
-            if self.last_reminder_week != week_num:
-                await channel.send("@everyone RAUÅ I GIR, ukå begynne snart så sjekk #vestsk-tipping!")
-                self.last_reminder_week = week_num
-                print(f"[INFO] Torsdagspåminnelse sendt for uke {week_num} ({now})")
-            else:
-                print(f"[DEBUG] Torsdagspåminnelse allerede sendt for uke {week_num} ({now})")
+        sunday_events = [
+            ev for ev in events
+            if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
+        ]
+        if not sunday_events:
+            print(f"[DEBUG] Ingen søndagskamper funnet ({now})")
+            return
 
-        # === Søndag før første kamp ===
-        if søndag_ok:
-            sunday_events = [
-                ev for ev in events
-                if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
-            ]
-            if sunday_events:
-                sunday_events.sort(key=lambda ev: ev.get("date"))
-                first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
-                seconds_to_game = (first_sunday_game - now).total_seconds()
+        sunday_events.sort(key=lambda ev: ev.get("date"))
+        first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
+        seconds_to_game = (first_sunday_game - now).total_seconds()
 
-                if self.last_reminder_sunday != first_sunday_game.date():
-                    if 3300 <= seconds_to_game <= 3900:  # 55–65 min før kickoff
-                        await channel.send(
-                            f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
-                        )
-                        self.last_reminder_sunday = first_sunday_game.date()
-                        print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
-                    else:
-                        print(f"[DEBUG] Ikke i søndagsvindu (nå: {now}, kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)")
-                else:
-                    print(f"[DEBUG] Søndagspåminnelse allerede sendt for {first_sunday_game.date()} ({now})")
-            else:
-                print(f"[DEBUG] Ingen søndagskamper funnet ({now})")
+        if self.last_reminder_sunday != first_sunday_game.date() and 3300 <= seconds_to_game <= 3900:
+            await channel.send(
+                f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
+            )
+            self.last_reminder_sunday = first_sunday_game.date()
+            print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
+        else:
+            print(f"[DEBUG] Søndagspåminnelse ikke sendt (nå: {now}, kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)")
 
-    @tasks.loop(minutes=5)
-    async def reminder_loop(self):
+    async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
         channel = self.bot.get_channel(CHANNEL_ID)
-        if not channel:
-            return
+        while True:
+            now = datetime.now(self.norsk_tz)
+            weekday = now.weekday()
 
-        now = datetime.now(self.norsk_tz)
+            # === Torsdagspåminnelse ===
+            if weekday == 3:
+                week_num = now.isocalendar()[1]
+                reminder_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
+                if now < reminder_time:
+                    sleep_seconds = (reminder_time - now).total_seconds()
+                    await asyncio.sleep(sleep_seconds)
+                    
+                    if self.last_reminder_week != week_num:
+                        await channel.send("@everyone RAUÅ I GIR, ukå begynne snart så sjekk #vestsk-tipping!")
+                        self.last_reminder_week = week_num
+                        print(f"[INFO] Torsdagspåminnelse sendt for uke {week_num} ({reminder_time})")
+                    
+                    tomorrow = reminder_time + timedelta(days=1)
+                    await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())
+                    continue
 
-        # Hent ukens kamper
-        season = now.year
-        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-        data = requests.get(url).json()
-        events = data.get("events", [])
-        if not events:
-            return
+            # === Søndagspåminnelse ===
+            if weekday == 6:
+                # Henter kamper fra ESPNs API
+                url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+                try:
+                    data = requests.get(url).json()
+                except Exception as e:
+                    print(f"[ERROR] ESPN API: {e}")
+                    await asyncio.sleep(600)
+                    continue
+                events = data.get("events", [])
+                sunday_events = [
+                    ev for ev in events
+                    if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
+                ]
+                if sunday_events:
+                    sunday_events.sort(key=lambda ev: ev.get("date"))
+                    first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
+                    reminder_time = first_sunday_game - timedelta(minutes=60)
+                    if now < reminder_time:
+                        sleep_seconds = (reminder_time - now).total_seconds()
+                        await asyncio.sleep(sleep_seconds)
+                        
+                        if self.last_reminder_sunday != first_sunday_game.date():
+                            await channel.send(
+                                f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
+                            )
+                            self.last_reminder_sunday = first_sunday_game.date()
+                            print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({reminder_time})")
+                        
+                        tomorrow = reminder_time + timedelta(days=1)
+                        await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())
+                        continue
 
-        events.sort(key=lambda ev: ev.get("date"))
+            # Regner ut tid til neste vindu
+            next_thursday = now + timedelta(days=(3 - weekday) % 7)
+            next_thursday = next_thursday.replace(hour=18, minute=0, second=0, microsecond=0)
+            next_sunday = now + timedelta(days=(6 - weekday) % 7)
+            next_sunday = next_sunday.replace(hour=8, minute=0, second=0, microsecond=0)
 
-        await self._send_reminders(now, events, channel)
-
-
-    @reminder_loop.before_loop
-    async def before_reminder_loop(self):
-        await self.bot.wait_until_ready()
-
+            sleep_until = min(next_thursday, next_sunday)
+            sleep_seconds = (sleep_until - now).total_seconds()
+            await asyncio.sleep(max(sleep_seconds, 300))
 
     def _format_event(self, ev):
         comps = ev["competitions"][0]["competitors"]
@@ -337,7 +361,6 @@ class VestskTipping(commands.Cog):
         lines.append("`")
         await ctx.send("\n".join(lines))
         await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert.")
-
 
 async def setup(bot):
     await bot.add_cog(VestskTipping(bot))
