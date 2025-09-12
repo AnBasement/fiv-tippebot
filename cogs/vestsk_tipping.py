@@ -64,45 +64,49 @@ class VestskTipping(commands.Cog):
 
     # === reminders task ===
     async def _send_reminders(self, now, events, channel):
-        """Send påminnelse torsdag kl. 18:00 (±15 min) og søndag ca. 1 time før første kamp."""
+        """Send påminnelse torsdag 18:00 (±15 min) og søndag før første kamp."""
         week_num = now.isocalendar()[1]
 
+        # === Guard: botten kjører kun i passende tidsvindu istedenfor døgnet rundt ===
+        torsdag_ok = (...)
+        søndag_ok = (...)
+        if not (torsdag_ok or søndag_ok):
+            print(f"[DEBUG] Utenfor reminder-vindu ({now})")
+            return
+
         # === Torsdag kl. 18:00 norsk tid ===
-        if now.weekday() == 3 and now.hour == 18 and 0 <= now.minute < 15:
+        if torsdag_ok:
             if self.last_reminder_week != week_num:
                 await channel.send("@everyone RAUÅ I GIR, ukå begynne snart så sjekk #vestsk-tipping!")
                 self.last_reminder_week = week_num
                 print(f"[INFO] Torsdagspåminnelse sendt for uke {week_num} ({now})")
             else:
                 print(f"[DEBUG] Torsdagspåminnelse allerede sendt for uke {week_num} ({now})")
-        else:
-            print(f"[DEBUG] Ikke i torsdagsvindu (nå: {now})")
 
-        # === Første kamp på søndag ===
-        sunday_events = [
-            ev for ev in events
-            if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
-        ]
-        if sunday_events:
-            sunday_events.sort(key=lambda ev: ev.get("date"))
-            first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
-            seconds_to_game = (first_sunday_game - now).total_seconds()
+        # === Søndag før første kamp ===
+        if søndag_ok:
+            sunday_events = [
+                ev for ev in events
+                if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
+            ]
+            if sunday_events:
+                sunday_events.sort(key=lambda ev: ev.get("date"))
+                first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
+                seconds_to_game = (first_sunday_game - now).total_seconds()
 
-            # Mellom 55 og 65 minutter før kickoff
-            if self.last_reminder_sunday != first_sunday_game.date():
-                if 3300 <= seconds_to_game <= 3900:
-                    await channel.send(
-                        f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
-                    )
-                    self.last_reminder_sunday = first_sunday_game.date()
-                    print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
+                if self.last_reminder_sunday != first_sunday_game.date():
+                    if 3300 <= seconds_to_game <= 3900:  # 55–65 min før kickoff
+                        await channel.send(
+                            f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
+                        )
+                        self.last_reminder_sunday = first_sunday_game.date()
+                        print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
+                    else:
+                        print(f"[DEBUG] Ikke i søndagsvindu (nå: {now}, kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)")
                 else:
-                    print(f"[DEBUG] Ikke i søndagsvindu (nå: {now}, kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)")
+                    print(f"[DEBUG] Søndagspåminnelse allerede sendt for {first_sunday_game.date()} ({now})")
             else:
-                print(f"[DEBUG] Søndagspåminnelse allerede sendt for {first_sunday_game.date()} ({now})")
-        else:
-            print(f"[DEBUG] Ingen søndagskamper funnet ({now})")
-
+                print(f"[DEBUG] Ingen søndagskamper funnet ({now})")
 
     @tasks.loop(minutes=5)
     async def reminder_loop(self):
