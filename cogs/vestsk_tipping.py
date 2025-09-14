@@ -231,7 +231,7 @@ class VestskTipping(commands.Cog):
             for cell_obj, val in zip(cell_range, flat_values):
                 cell_obj.value = val
             sheet.update_cells(cell_range)
-            await ctx.send("<:brady:754803554102935692> Eksportski komplettski <:brady:754803554102935692>")
+            await ctx.send("Kampdata eksportert til Sheets.")
         else:
             await ctx.send("Ingen verdier å oppdatere")
 
