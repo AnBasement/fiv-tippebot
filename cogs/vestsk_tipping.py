@@ -84,7 +84,7 @@ class VestskTipping(commands.Cog):
 
         if self.last_reminder_sunday != first_sunday_game.date() and 3300 <= seconds_to_game <= 3900:
             await channel.send(
-                f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
+                f"@everyone Early window snart, husk <#795485646545748058>!"
             )
             self.last_reminder_sunday = first_sunday_game.date()
             print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
