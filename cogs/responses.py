@@ -30,5 +30,5 @@ class Responses(commands.Cog):
         await ctx.send("Harrison Bitchker er gerontofil")
 
 # --- Setup ---
-def setup(bot):
-    bot.add_cog(Responses(bot))
+async def setup(bot):
+    await bot.add_cog(Responses(bot))
