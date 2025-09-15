@@ -42,8 +42,10 @@ async def on_command_error(ctx, error):
         if uid not in last_warned or now - last_warned[uid] > 5:
             last_warned[uid] = now
             await ctx.send(
-                f"{ctx.author.mention} e ein liten pissemaur. STRAFFESHOT! (Prøv igjen om {error.retry_after:.1f} sekunder.)"
+                f"{ctx.author.mention} e ein liten pissemaur. STRAFFESHOT! "
+                f"(Prøv igjen om {error.retry_after:.1f} sekunder.)"
             )
+
     else:
         raise error
 

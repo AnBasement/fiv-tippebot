@@ -1,7 +1,6 @@
 # Tullekommandoer, for det meste
 
 from discord.ext import commands
-import random
 
 class Responses(commands.Cog):
     """Cog for kommandoer hvor botten svarer med enkel melding."""
@@ -12,7 +11,11 @@ class Responses(commands.Cog):
     @commands.command(name="kaimi")
     async def kaimi(self, ctx):
         """Når kaimi scorer."""
-        await ctx.send("<:hou:752546616526897243> LET'S GO JOHN CHRISTIAN KA'IMINOEAULOAMEKA'IKEOKEKUMUPA'A \"KA'IMI\" FAIRBAIRN! <:hou:752546616526897243> ")
+        await ctx.send(
+            "<:hou:752546616526897243> LET'S GO JOHN CHRISTIAN KA'IMINOEAULOAMEKA'IKEOKEKUMUPA'A "
+            "\"KA'IMI\" FAIRBAIRN! <:hou:752546616526897243> "
+        )
+
 
     @commands.command(name="doc")
     async def doc(self, ctx):

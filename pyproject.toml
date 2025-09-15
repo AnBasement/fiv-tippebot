@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "__pycache__",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+per-file-ignores = { "tests/*" = ["F401"] }

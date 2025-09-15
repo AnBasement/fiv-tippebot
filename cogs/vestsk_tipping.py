@@ -1,5 +1,4 @@
-import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.ext.commands import CheckFailure
 import requests
 from datetime import datetime, timedelta
@@ -9,7 +8,7 @@ import asyncio
 import os
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from cogs.sheets import get_sheet, get_players, green_format, red_format, yellow_format, format_cell
+from cogs.sheets import get_sheet, green_format, red_format, yellow_format, format_cell
 
 CHANNEL_ID = 752538512250765314 
 
@@ -59,12 +58,13 @@ class VestskTipping(commands.Cog):
             away = next(c for c in comps if c["homeAway"] == "away")
             home_team = home["team"]["displayName"]
             away_team = away["team"]["displayName"]
-            await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ {home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
+            await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ "
+               f"{home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
+
 
     # === reminders task ===
     async def _send_reminders(self, now, events, channel):
         """Send søndagspåminnelse før første kamp."""
-        week_num = now.isocalendar()[1]
 
         # Kun søndagspåminnelse
         if now.weekday() != 6 or not events:
@@ -79,17 +79,21 @@ class VestskTipping(commands.Cog):
             return
 
         sunday_events.sort(key=lambda ev: ev.get("date"))
-        first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
+        first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
         seconds_to_game = (first_sunday_game - now).total_seconds()
 
-        if self.last_reminder_sunday != first_sunday_game.date() and 3300 <= seconds_to_game <= 3900:
+        if self.last_reminder_sunday != first_sunday_game.date() and 3300 <= seconds_to_game <= 3900:  # noqa: E501
             await channel.send(
-                f"@everyone Early window snart, husk <#795485646545748058>!"
+                "@everyone Early window snart, husk <#795485646545748058>!"
             )
             self.last_reminder_sunday = first_sunday_game.date()
             print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
         else:
-            print(f"[DEBUG] Søndagspåminnelse ikke sendt (nå: {now}, kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)")
+            print(
+                f"[DEBUG] Søndagspåminnelse ikke sendt (nå: {now}, "
+                f"kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)"
+            )
+
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
@@ -107,9 +111,13 @@ class VestskTipping(commands.Cog):
                     await asyncio.sleep(sleep_seconds)
                     
                     if self.last_reminder_week != week_num:
-                        await channel.send("@everyone RAUÅ I GIR, ukå begynne snart så sjekk #vestsk-tipping!")
+                        await channel.send(
+                            "@everyone RAUÅ I GIR, ukå begynne snart "
+                            "så sjekk <#795485646545748058>!"
+                        )
+
                         self.last_reminder_week = week_num
-                        print(f"[INFO] Torsdagspåminnelse sendt for uke {week_num} ({reminder_time})")
+                        print(f"Torsdagspåminnelse sendt for uke {week_num} ({reminder_time})")
                     
                     tomorrow = reminder_time + timedelta(days=1)
                     await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())
@@ -132,7 +140,7 @@ class VestskTipping(commands.Cog):
                 ]
                 if sunday_events:
                     sunday_events.sort(key=lambda ev: ev.get("date"))
-                    first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)
+                    first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
                     reminder_time = first_sunday_game - timedelta(minutes=60)
                     if now < reminder_time:
                         sleep_seconds = (reminder_time - now).total_seconds()
@@ -140,13 +148,17 @@ class VestskTipping(commands.Cog):
                         
                         if self.last_reminder_sunday != first_sunday_game.date():
                             await channel.send(
-                                f"@everyone Early window snart, husk #vestsk-tipping: {self._format_event(sunday_events[0])}"
+                                f"@everyone Early window snart, husk <#795485646545748058>: "
+                                f"{self._format_event(sunday_events[0])}"
                             )
                             self.last_reminder_sunday = first_sunday_game.date()
-                            print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({reminder_time})")
+                            print(
+                                f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} "
+                                f"({reminder_time})"
+                            )
                         
                         tomorrow = reminder_time + timedelta(days=1)
-                        await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())
+                        await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())  # noqa: E501
                         continue
 
             # Regner ut tid til neste vindu
@@ -165,7 +177,10 @@ class VestskTipping(commands.Cog):
         away = next(c for c in comps if c["homeAway"] == "away")
         home_team = home["team"]["displayName"]
         away_team = away["team"]["displayName"]
-        return f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ {home_team} {teams.get(home_team, {'emoji':''})['emoji']}"
+        return (
+            f"{teams.get(away_team, {'emoji': ''})['emoji']} {away_team} @ "
+            f"{home_team} {teams.get(home_team, {'emoji': ''})['emoji']}"
+        )
 
     # === eksport ===
     @commands.command(name="eksporter")
@@ -246,7 +261,7 @@ class VestskTipping(commands.Cog):
         norsk_tz = pytz.timezone("Europe/Oslo")
         season = datetime.now(norsk_tz).year
 
-        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+        url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
         if uke:
             url += f"?dates={season}&seasontype=2&week={uke}"
 
@@ -261,8 +276,8 @@ class VestskTipping(commands.Cog):
             comps = ev["competitions"][0]["competitors"]
             home = next(c for c in comps if c["homeAway"] == "home")
             away = next(c for c in comps if c["homeAway"] == "away")
-            home_team = team_location.get(home["team"]["displayName"], home["team"]["displayName"].split()[-1])
-            away_team = team_location.get(away["team"]["displayName"], away["team"]["displayName"].split()[-1])
+            home_team = team_location.get(home["team"]["displayName"], home["team"]["displayName"].split()[-1])  # noqa: E501
+            away_team = team_location.get(away["team"]["displayName"], away["team"]["displayName"].split()[-1])  # noqa: E501
             kampkode = f"{away_team}@{home_team}"
 
             home_score = int(home["score"])
@@ -302,7 +317,14 @@ class VestskTipping(commands.Cog):
 
             for col_idx, discord_id in enumerate(players.keys(), start=2):
                 cell_value = sheet.cell(row_idx, col_idx).value
-                gyldige_svar = [riktig_vinner] if riktig_vinner == "Uavgjort" else [v["short"] for v in teams.values() if v["short"].lower() == riktig_vinner.lower()]
+                gyldige_svar = (
+                    [riktig_vinner] if riktig_vinner == "Uavgjort" 
+                    else [
+                        v["short"] 
+                        for v in teams.values() 
+                        if v["short"].lower() == riktig_vinner.lower()
+                    ]
+                )
 
                 if not cell_value:
                     fmt = yellow
