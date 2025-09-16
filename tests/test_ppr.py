@@ -23,7 +23,7 @@ DUMMY_TEAM_NAMES = {
 
 # --- Fixtures ---
 @pytest.fixture
-@patch("cogs.sheets.get_client")
+@patch("cogs.ppr.get_client")
 def cog(mock_get_client):
     mock_bot = MagicMock()
     mock_sheet = MagicMock()
