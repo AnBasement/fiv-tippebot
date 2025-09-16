@@ -27,7 +27,8 @@ class VestskTipping(commands.Cog):
     def get_players(self, sheet):
         """Returnerer mapping: Discord ID → kolonne"""
         id_row = sheet.row_values(2)
-        players = {id_row[i]: i for i in range(len(id_row)) if id_row[i]}
+        # Hopp over kolonne A (index 0), start fra B (index 1)
+        players = {id_row[i]: i+1 for i in range(1, len(id_row)) if id_row[i]}
         print(f"[DEBUG] get_players: {players}")
         return players
 
