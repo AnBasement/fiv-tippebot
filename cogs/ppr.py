@@ -4,6 +4,7 @@
 from discord.ext import commands
 from cogs.sheets import get_client
 from data.brukere import TEAM_NAMES
+import os
 
 class PPR(commands.Cog):
     """Cog for PPR-relaterte kommandoer."""
@@ -82,6 +83,7 @@ class PPR(commands.Cog):
         print(f"Lagt til {num_rows} rader i PPR-historikk")
 
     @commands.command(name="ppr")
+    @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def ppr(self, ctx):
         """Printer oppdatert PPR til Discord med endringer fra forrige snapshot."""
         players = self._get_players()
