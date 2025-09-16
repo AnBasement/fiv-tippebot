@@ -26,14 +26,19 @@ DUMMY_TEAM_NAMES = {
 def cog():
     mock_bot = MagicMock()
     mock_sheet = MagicMock()
-
-    # Mock get_client() så PPR får et dummy sheet i stedet for None
     dummy_client = MagicMock()
     dummy_client.open.return_value = mock_sheet
 
-    with patch("cogs.sheets.get_client", return_value=dummy_client):
-        ppr_cog = PPR(mock_bot)
-        yield ppr_cog
+    # Start patching og behold patchen aktiv gjennom hele fixture
+    patcher = patch("cogs.sheets.get_client", return_value=dummy_client)
+    patcher.start()
+
+    ppr_cog = PPR(mock_bot)
+
+    yield ppr_cog
+
+    # Stopp patching etter testen
+    patcher.stop()
 
 # --- Tester ---
 @pytest.mark.asyncio
