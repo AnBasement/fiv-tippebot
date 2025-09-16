@@ -16,7 +16,6 @@ class Responses(commands.Cog):
             "\"KA'IMI\" FAIRBAIRN! <:hou:752546616526897243> "
         )
 
-
     @commands.command(name="doc")
     async def doc(self, ctx):
         """Lenker til FiV-dokumentet."""

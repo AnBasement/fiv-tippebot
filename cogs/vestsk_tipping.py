@@ -24,6 +24,13 @@ class VestskTipping(commands.Cog):
         self.last_reminder_sunday = now.date()
         self.reminder_task = self.bot.loop.create_task(self.reminder_scheduler())
 
+    def get_players(self, sheet):
+        """Returnerer mapping: Discord ID → kolonne"""
+        id_row = sheet.row_values(2)
+        players = {id_row[i]: i for i in range(len(id_row)) if id_row[i]}
+        print(f"[DEBUG] get_players: {players}")
+        return players
+
     def cog_unload(self):
         self.reminder_task.cancel()
 
@@ -189,11 +196,10 @@ class VestskTipping(commands.Cog):
         await self._export_impl(ctx, uke)
 
     async def _export_impl(self, ctx, uke: int = None):
-        sheet = get_sheet()
+        sheet = get_sheet("Vestsk Tipping")
         channel = ctx.channel
 
-        id_row = sheet.row_values(2)
-        players = {id_row[i]: i for i in range(len(id_row))}
+        players = self.get_players(sheet)
         num_players = len(players)
 
         norsk_tz = pytz.timezone("Europe/Oslo")
@@ -254,20 +260,28 @@ class VestskTipping(commands.Cog):
     @commands.command(name="resultater")
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def resultater(self, ctx, uke: int = None):
+        print(f"[DEBUG] Kommando !resultater kjørt for uke={uke}")
         await self._resultater_impl(ctx, uke)
 
     async def _resultater_impl(self, ctx, uke: int = None):
-        sheet = get_sheet()
+        sheet = get_sheet("Vestsk Tipping")
+        print(f"[DEBUG] Henter sheet: {sheet.title if sheet else 'None'}")
+
         norsk_tz = pytz.timezone("Europe/Oslo")
         season = datetime.now(norsk_tz).year
+        print(f"[DEBUG] Sesong: {season}")
 
         url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
         if uke:
             url += f"?dates={season}&seasontype=2&week={uke}"
+        print(f"[DEBUG] Henter URL: {url}")
 
         data = requests.get(url).json()
         events = data.get("events", [])
+        print(f"[DEBUG] Antall events hentet: {len(events)}")
+
         if not events:
+            print("[DEBUG] Ingen kamper funnet")
             await ctx.send("Fant ingen kamper")
             return
 
@@ -288,9 +302,10 @@ class VestskTipping(commands.Cog):
                 kamp_resultater[kampkode] = away_team
             else:
                 kamp_resultater[kampkode] = "Uavgjort"
+        print(f"[DEBUG] Kampresultater: {kamp_resultater}")
 
-        id_row = sheet.row_values(2)[1:]
-        players = {id_row[i]: i+2 for i in range(len(id_row))}
+        players = self.get_players(sheet)
+        print(f"[DEBUG] Spillere funnet: {players}")
         num_players = len(players)
 
         sheet_rows = sheet.get_all_values()[2:]
@@ -301,9 +316,12 @@ class VestskTipping(commands.Cog):
             if kampkode:
                 sheet_kamper.append(kampkode)
                 row_mapping[len(sheet_kamper)-1] = i
+        print(f"[DEBUG] Kamper i sheet: {sheet_kamper}")
+        print(f"[DEBUG] Row mapping: {row_mapping}")
 
-        uke_total_row = max(row_mapping.values()) + 1
+        uke_total_row = max(row_mapping.values(), default=3) + 1
         sesong_total_row = uke_total_row + 1
+        print(f"[DEBUG] Uke total rad: {uke_total_row}, sesong total rad: {sesong_total_row}")
 
         green = green_format()
         red = red_format()
@@ -314,6 +332,7 @@ class VestskTipping(commands.Cog):
         for idx, kampkode in enumerate(sheet_kamper):
             row_idx = row_mapping[idx]
             riktig_vinner = kamp_resultater.get(kampkode)
+            print(f"[DEBUG] Prosesserer kamp {kampkode} (riktig vinner: {riktig_vinner})")
 
             for col_idx, discord_id in enumerate(players.keys(), start=2):
                 cell_value = sheet.cell(row_idx, col_idx).value
@@ -342,6 +361,8 @@ class VestskTipping(commands.Cog):
 
                 await asyncio.sleep(1.5)
 
+        print(f"[DEBUG] Ukespoeng: {uke_poeng}")
+
         # Ukespoeng
         for idx, poeng in enumerate(uke_poeng, start=2):
             try:
@@ -359,6 +380,9 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(1.5)
             except Exception as e:
                 print(f"[RESULTATER] FEIL ved sesongpoeng, kolonne {idx}: {e}")
+
+        print("[DEBUG] Ferdig med oppdatering av sheet, sender Discord-melding")
+
 
         # Discord-melding
         header_row = sheet.row_values(1)[1:1+num_players]
@@ -384,5 +408,6 @@ class VestskTipping(commands.Cog):
         await ctx.send("\n".join(lines))
         await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert.")
 
+# --- Setup ---
 async def setup(bot):
     await bot.add_cog(VestskTipping(bot))
