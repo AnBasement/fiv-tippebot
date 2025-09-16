@@ -15,17 +15,20 @@ Botten håndterer vestsk-tipping inkl. integrasjon med Google Sheets og diverse 
     .gitignore            # Ignorerte filer for git
 
     cogs/
+        ppr.py              # Oppdaterer leaderboard for PPR
         utility.py          # Små hjelpekommandoer (f.eks. ping)
         vestsk_tipping.py   # Tippelek: kamper, eksporter, resultater og påminnelser
         sheets.py           # Hjelpefunksjoner for Google Sheets
         responses.py        # Diverse kommandoer med enkle svar
 
     data/
+        brukere.py          # Kobler navn til lagnavn i FiV
         teams.py            # Team-data, short-names og emojis
 
     tests/                   
         __init__.py
         conftest.py
+        test_ppr.py              # Tester for ppr.py
         test_responses.py        # Tester for responses.py
         test_sheets.py           # Tester for sheets.py
         test_utility.py          # Tester for utility.py
