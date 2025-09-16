@@ -54,6 +54,7 @@ cogs = [
     "cogs.utility",          # ping, småkommandoer
     "cogs.vestsk_tipping",   # kamper, eksporter, resultater
     "cogs.responses",        # forskjellige humorkommandoer
+    "cogs.ppr",              # oppdaterer og poster PPRs
 ]
 
 # === Events ===
