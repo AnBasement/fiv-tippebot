@@ -23,27 +23,22 @@ DUMMY_TEAM_NAMES = {
 
 # --- Fixtures ---
 @pytest.fixture
-def cog():
+@patch("cogs.sheets.get_client")
+def cog(mock_get_client):
     mock_bot = MagicMock()
     mock_sheet = MagicMock()
+    # Sett mock_get_client til å returnere et dummy client som har open() -> mock_sheet
     dummy_client = MagicMock()
     dummy_client.open.return_value = mock_sheet
+    mock_get_client.return_value = dummy_client
 
-    # Start patching og behold patchen aktiv gjennom hele fixture
-    patcher = patch("cogs.sheets.get_client", return_value=dummy_client)
-    patcher.start()
-
+    # Opprett PPR etter patchen er aktiv
     ppr_cog = PPR(mock_bot)
-
-    yield ppr_cog
-
-    # Stopp patching etter testen
-    patcher.stop()
+    return ppr_cog
 
 # --- Tester ---
 @pytest.mark.asyncio
 async def test_get_players_returns_list(monkeypatch, cog):
-    # Patch _get_players internt hvis nødvendig
     monkeypatch.setattr(cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS))
     players = cog._get_players()
     assert isinstance(players, list)
@@ -52,37 +47,26 @@ async def test_get_players_returns_list(monkeypatch, cog):
 @pytest.mark.asyncio
 async def test_save_snapshot(monkeypatch, cog):
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
-
-    # Mock worksheet
     ws_mock = MagicMock()
     ws_mock.col_values.return_value = [""]  # tom kolonne
     ws_mock.range.return_value = [MagicMock() for _ in range(len(DUMMY_PLAYERS) * 3)]
     cog.sheet.worksheet.return_value = ws_mock
 
-    # Kjør _save_snapshot synkront
     cog._save_snapshot(DUMMY_PLAYERS)
-
-    # Sjekk at update_cells ble kalt
     ws_mock.update_cells.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_ppr_command_logic(monkeypatch, cog):
     monkeypatch.setattr(cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS))
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
-
-    # Mock Discord ctx
     ctx = MagicMock()
     ctx.send = AsyncMock()
-
-    # Mock worksheet og get_all_values
     ws_mock = MagicMock()
     ws_mock.get_all_values.return_value = DUMMY_HISTORY
     cog.sheet.worksheet.return_value = ws_mock
 
-    # Kall den interne logikken direkte
     await cog.ppr.callback(cog, ctx)
 
-    # Sjekk at ctx.send ble kalt
     ctx.send.assert_called_once()
     sent_msg = ctx.send.call_args[0][0]
     assert "Kris" in sent_msg
