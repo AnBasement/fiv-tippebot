@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from cogs.ppr import PPR
 
 # --- Dummy data ---
@@ -24,11 +24,16 @@ DUMMY_TEAM_NAMES = {
 # --- Fixtures ---
 @pytest.fixture
 def cog():
-    # Opprett en PPR-instans med mock bot og mock sheet
     mock_bot = MagicMock()
-    ppr_cog = PPR(mock_bot)
-    ppr_cog.sheet = MagicMock()
-    return ppr_cog
+    mock_sheet = MagicMock()
+
+    # Mock get_client() så PPR får et dummy sheet i stedet for None
+    dummy_client = MagicMock()
+    dummy_client.open.return_value = mock_sheet
+
+    with patch("cogs.sheets.get_client", return_value=dummy_client):
+        ppr_cog = PPR(mock_bot)
+        yield ppr_cog
 
 # --- Tester ---
 @pytest.mark.asyncio
@@ -41,13 +46,11 @@ async def test_get_players_returns_list(monkeypatch, cog):
 
 @pytest.mark.asyncio
 async def test_save_snapshot(monkeypatch, cog):
-    # Patch TEAM_NAMES
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
 
     # Mock worksheet
     ws_mock = MagicMock()
     ws_mock.col_values.return_value = [""]  # tom kolonne
-    # Lag et mock for alle celler som oppdateres
     ws_mock.range.return_value = [MagicMock() for _ in range(len(DUMMY_PLAYERS) * 3)]
     cog.sheet.worksheet.return_value = ws_mock
 
@@ -59,7 +62,6 @@ async def test_save_snapshot(monkeypatch, cog):
 
 @pytest.mark.asyncio
 async def test_ppr_command_logic(monkeypatch, cog):
-    # Patch _get_players og TEAM_NAMES
     monkeypatch.setattr(cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS))
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
 
@@ -73,13 +75,11 @@ async def test_ppr_command_logic(monkeypatch, cog):
     cog.sheet.worksheet.return_value = ws_mock
 
     # Kall den interne logikken direkte
-    # Her kaller vi ppr funksjonen som et async kall med ctx
     await cog.ppr.callback(cog, ctx)
 
     # Sjekk at ctx.send ble kalt
     ctx.send.assert_called_once()
     sent_msg = ctx.send.call_args[0][0]
-    # Sjekk at melding inneholder rank og team shortnames
     assert "Kris" in sent_msg
     assert "Aril" in sent_msg
     assert "Knuts" in sent_msg
