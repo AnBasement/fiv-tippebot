@@ -47,9 +47,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio asynctest
+          pip install pytest pytest-asyncio asynctest pytest-cov
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
           # Ignorer DeprecationWarnings for pytz / oauth2client
-          pytest -W ignore::DeprecationWarning
+          pytest -W ignore::DeprecationWarning --cov=. --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }} # <-- bare hvis repoet er privat
