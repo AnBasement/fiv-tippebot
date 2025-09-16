@@ -1,35 +1,57 @@
-# Vestsk Tipping Discord Bot
+# Fest i Vest Discord Bot
 
-Bot for privat tippelek ved siden av NFL Fantasy-ligaen.
+Discord-bot laget for privat bruk i Fest i Vests server.  
+Botten håndterer vestsk-tipping inkl. integrasjon med Google Sheets og diverse kommandoer.
 
 ## Filstruktur
 
-```
-bot.py                # Starter botten og laster cogs
-keep_alive.py         # Holder botten i live på Render/UptimeRobot
-credentials.json      # Google Sheets API credentials (i .gitignore)
-.env                  # Miljøvariabler (DISCORD_TOKEN, ADMIN_IDS)
-requirements.txt
-runtime.txt
+    bot.py                # Starter boten og laster cogs
+    keep_alive.py         # Holder boten i live på Render
+    credentials.json      # Google Sheets API credentials (i .gitignore)
+    .env                  # Miljøvariabler (i .gitignore)
+    requirements.txt      # Python dependencies
+    pyproject.toml        # Prosjektkonfig (ruff, pytest, osv.)
+    runtime.txt           # Python-versjon for hosting
+    .gitignore            # Ignorerte filer for git
 
-cogs/
-├─ utility.py          # Små hjelpekommandoer (f.eks. ping)
-├─ vestsk_tipping.py   # Tippelek: kamper, eksporter, resultater
-├─ sheets.py           # Helpers for Google Sheets (formatering, kolonner, farger)
+    cogs/
+        utility.py          # Små hjelpekommandoer (f.eks. ping)
+        vestsk_tipping.py   # Tippelek: kamper, eksporter, resultater og påminnelser
+        sheets.py           # Hjelpefunksjoner for Google Sheets
+        responses.py        # Diverse kommandoer med enkle svar
 
-data/
-├─ teams.py            # Team-data og emojis
-```
+    data/
+        teams.py            # Team-data, short-names og emojis
 
-## Struktur og funksjonalitet
+    tests/                   
+        __init__.py
+        conftest.py
+        test_responses.py        # Tester for responses.py
+        test_sheets.py           # Tester for sheets.py
+        test_utility.py          # Tester for utility.py
+        test_vestsk_tipping.py   # Tester for vestsk_tipping.py
 
-- **bot.py**: Starter botten, laster alle cogs, og setter opp intents.
-- **cogs/utility.py**: Små hjelpekommandoer, f.eks. ping.
-- **cogs/vestsk_tipping.py**: Kommandoer for tippeleken: kamper, eksporter og resultater. Inkluderer admin-sjekk der nødvendig.
-- **cogs/sheets.py**: Funksjoner for å hente Sheet, formatere celler og fargelegge.
-- **data/teams.py**: Inneholder team-data, short-names og emojis.
+    .github/
+        workflows/          # GitHub Actions CI/CD-oppsett
+
+    .pytest_cache/         # Lokal cache (i .gitignore)
+    .ruff_cache/           # Ruff cache (i .gitignore)
 
 ## Miljøvariabler
 
-- **DISCORD_TOKEN**: Token for Discord-botten.
-- **ADMIN_IDS**: Komma-separert liste over Discord ID-er som skal ha admin-tilgang til tippekommandoene.
+- DISCORD_TOKEN: Token for Discord-boten.
+- GOOGLE_SHEETS_KEYFILE: Credentials.json inneholder info for bruk av Googe Sheets API.
+- ADMIN_IDS: Komma-separert liste over Discord ID-er med admin-tilgang til tippekommandoene.
+
+Credentials.json og .env pushes ikke til repo; begge er listet i .gitignore.
+
+## Bidra
+
+- Foreslå features, legg inn et issue.
+- Legg til nye funksjoner i cogs/ eller hjelpere i cogs/.
+- Skriv tester i tests/ for ny logikk.
+- Åpne en PR mot hovedbranch; CI kjører tester og linting automatisk.
+
+## Notater
+
+- Prosjektet bruker pyproject.toml til å konfigurere verktøy (f.eks. ruff, pytest).
