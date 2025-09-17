@@ -2,6 +2,7 @@
 # og lagrer snapshots til skjult ark.
 
 from discord.ext import commands
+from core.errors import PPRFetchError, PPRSnapshotError
 from cogs.sheets import get_client
 from data.brukere import TEAM_NAMES
 import os
@@ -37,12 +38,11 @@ class PPR(commands.Cog):
                 try:
                     ppr_value = float(rows[target_row-1][1])  # B = indeks 1
                 except ValueError:
-                    print(f"Ugyldig PPR i {ws.title}, rad {target_row}")
-                    continue
+                    raise PPRFetchError(ws.title, season, f"Ugyldig PPR-verdi i rad {target_row}")
                 print(f"Finner PPR for {ws.title}: {ppr_value}")  # debug
                 players.append({"team": ws.title, "ppr": ppr_value})
             else:
-                print(f"Fant ingen rad med år {season} i ark {ws.title}")
+                raise PPRFetchError(ws.title, season, f"Fant ingen rad for {season} i {ws.title}")
 
         print(f"Totalt spillere funnet: {len(players)}")  # debug
         return players
@@ -79,8 +79,12 @@ class PPR(commands.Cog):
         for cell_obj, val in zip(cell_range, flat_values):
             cell_obj.value = val
 
-        history_ws.update_cells(cell_range)
-        print(f"Lagt til {num_rows} rader i PPR-historikk")
+        try:
+            history_ws.update_cells(cell_range)
+        except Exception as e:
+            raise PPRSnapshotError(f"Kunne ikke oppdatere celler i PPR-historikk: {e}")
+
+        print(f"Lagt til {num_rows} rader i PPR-historikk")  # beholde debug
 
     @commands.command(name="ppr")
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))

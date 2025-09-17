@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from cogs import sheets
+from core.errors import MissingCredentialsError, ClientAuthorizationError
 
 # Dummy Sheet for testing
 class DummySheet:
@@ -17,8 +18,10 @@ class DummySheet:
 def test_get_creds_none(monkeypatch):
     # Simuler at credentials.json ikke finnes
     monkeypatch.setattr("os.path.exists", lambda x: False)
-    creds = sheets.get_creds()
-    assert creds is None
+    with pytest.raises(MissingCredentialsError) as exc_info:
+        sheets.get_creds()
+    
+    assert "Fant ikke Google API credentials-filen" in str(exc_info.value)
 
 
 def test_get_creds_returns_creds(monkeypatch):
@@ -36,6 +39,8 @@ def test_get_creds_returns_creds(monkeypatch):
 
 def test_get_client_none(monkeypatch):
     monkeypatch.setattr(sheets, "get_creds", lambda: None)
+    monkeypatch.setattr("gspread.authorize", lambda creds: None)
+
     client = sheets.get_client()
     assert client is None
 

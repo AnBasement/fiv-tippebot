@@ -9,6 +9,13 @@ import os
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format, format_cell
+from core.errors import (
+    APIFetchError,
+    NoEventsFoundError,
+    ExportError,
+    ResultaterError,
+    ReminderError,
+)
 
 CHANNEL_ID = 752538512250765314 
 
@@ -53,11 +60,14 @@ class VestskTipping(commands.Cog):
         season = datetime.now().year
         url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
                if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
-        data = requests.get(url).json()
+        try:
+            data = requests.get(url).json()
+        except Exception as e:
+            raise APIFetchError(url, e) from e
+
         events = data.get("events", [])
         if not events:
-            await ctx.send("Fant ingen kamper")
-            return
+            raise NoEventsFoundError(uke)
 
         events.sort(key=lambda ev: ev.get("date"))
         for ev in events:
@@ -68,7 +78,6 @@ class VestskTipping(commands.Cog):
             away_team = away["team"]["displayName"]
             await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ "
                f"{home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
-
 
     # === reminders task ===
     async def _send_reminders(self, now, events, channel):
@@ -83,8 +92,7 @@ class VestskTipping(commands.Cog):
             if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
         ]
         if not sunday_events:
-            print(f"[DEBUG] Ingen søndagskamper funnet ({now})")
-            return
+            raise ReminderError(f"Ingen søndagskamper funnet for dato {now.date()}")
 
         sunday_events.sort(key=lambda ev: ev.get("date"))
         first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
@@ -133,14 +141,15 @@ class VestskTipping(commands.Cog):
 
             # === Søndagspåminnelse ===
             if weekday == 6:
-                # Henter kamper fra ESPNs API
+                # Henter kamper fra ESPN API
                 url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
                 try:
                     data = requests.get(url).json()
                 except Exception as e:
-                    print(f"[ERROR] ESPN API: {e}")
-                    await asyncio.sleep(600)
-                    continue
+                    raise ReminderError(
+                        f"Kunne ikke hente reminder-data fra ESPN API: {url} ({e})"
+                    ) from e
+
                 events = data.get("events", [])
                 sunday_events = [
                     ev for ev in events
@@ -197,6 +206,7 @@ class VestskTipping(commands.Cog):
         await self._export_impl(ctx, uke)
 
     async def _export_impl(self, ctx, uke: int = None):
+
         sheet = get_sheet("Vestsk Tipping")
         channel = ctx.channel
 
@@ -216,6 +226,9 @@ class VestskTipping(commands.Cog):
             if msg.author == self.bot.user and "@" in msg.content:
                 messages.append(msg)
         messages.sort(key=lambda m: m.created_at)
+
+        if not messages:
+            raise ExportError(f"Ingen meldinger funnet å eksportere etter {start_of_week}")
 
         values = []
         for msg in messages:
@@ -248,11 +261,15 @@ class VestskTipping(commands.Cog):
         start_row = last_data_row + 2
 
         if values:
-            cell_range = sheet.range(start_row, 1, start_row + len(values) - 1, 1 + num_players)
-            flat_values = [cell for row in values for cell in row]
-            for cell_obj, val in zip(cell_range, flat_values):
-                cell_obj.value = val
-            sheet.update_cells(cell_range)
+            try:
+                cell_range = sheet.range(start_row, 1, start_row + len(values) - 1, 1 + num_players)
+                flat_values = [cell for row in values for cell in row]
+                for cell_obj, val in zip(cell_range, flat_values):
+                    cell_obj.value = val
+                sheet.update_cells(cell_range)
+            except Exception as e:
+                raise ExportError(f"Feil ved eksport til sheet '{sheet.title}': {e}") from e
+
             await ctx.send("Kampdata eksportert til Sheets.")
         else:
             await ctx.send("Ingen verdier å oppdatere")
@@ -261,11 +278,18 @@ class VestskTipping(commands.Cog):
     @commands.command(name="resultater")
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def resultater(self, ctx, uke: int = None):
+
         print(f"[DEBUG] Kommando !resultater kjørt for uke={uke}")
         await self._resultater_impl(ctx, uke)
 
     async def _resultater_impl(self, ctx, uke: int = None):
-        sheet = get_sheet("Vestsk Tipping")
+        try:
+            sheet = get_sheet("Vestsk Tipping")
+            if not sheet:
+                raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
+        except Exception as e:
+            raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
+
         print(f"[DEBUG] Henter sheet: {sheet.title if sheet else 'None'}")
 
         norsk_tz = pytz.timezone("Europe/Oslo")
@@ -277,26 +301,35 @@ class VestskTipping(commands.Cog):
             url += f"?dates={season}&seasontype=2&week={uke}"
         print(f"[DEBUG] Henter URL: {url}")
 
-        data = requests.get(url).json()
+        try:
+            data = requests.get(url).json()
+        except Exception as e:
+            raise APIFetchError(url, e)
+
         events = data.get("events", [])
         print(f"[DEBUG] Antall events hentet: {len(events)}")
 
         if not events:
-            print("[DEBUG] Ingen kamper funnet")
-            await ctx.send("Fant ingen kamper")
-            return
+            raise NoEventsFoundError(uke)
 
         kamp_resultater = {}
         for ev in events:
-            comps = ev["competitions"][0]["competitors"]
-            home = next(c for c in comps if c["homeAway"] == "home")
-            away = next(c for c in comps if c["homeAway"] == "away")
-            home_team = team_location.get(home["team"]["displayName"], home["team"]["displayName"].split()[-1])  # noqa: E501
-            away_team = team_location.get(away["team"]["displayName"], away["team"]["displayName"].split()[-1])  # noqa: E501
-            kampkode = f"{away_team}@{home_team}"
+            try:
+                comps = ev["competitions"][0]["competitors"]
+                home = next(c for c in comps if c["homeAway"] == "home")
+                away = next(c for c in comps if c["homeAway"] == "away")
+                home_team = team_location.get(home["team"]["displayName"], home["team"]["displayName"].split()[-1])  # noqa: E501
+                away_team = team_location.get(away["team"]["displayName"], away["team"]["displayName"].split()[-1])  # noqa: E501
+                kampkode = f"{away_team}@{home_team}"
 
-            home_score = int(home["score"])
-            away_score = int(away["score"])
+                home_score = int(home["score"])
+                away_score = int(away["score"])
+            except Exception as e:
+                raise ResultaterError(
+                    f"Feil ved parsing av kampdata for {ev.get('id', 'ukjent')}"
+                ) from e
+
+
             if home_score > away_score:
                 kamp_resultater[kampkode] = home_team
             elif away_score > home_score:
@@ -336,29 +369,31 @@ class VestskTipping(commands.Cog):
             print(f"[DEBUG] Prosesserer kamp {kampkode} (riktig vinner: {riktig_vinner})")
 
             for col_idx, discord_id in enumerate(players.keys(), start=2):
-                cell_value = sheet.cell(row_idx, col_idx).value
-                gyldige_svar = (
-                    [riktig_vinner] if riktig_vinner == "Uavgjort" 
-                    else [
-                        v["short"] 
-                        for v in teams.values() 
-                        if v["short"].lower() == riktig_vinner.lower()
-                    ]
-                )
-
-                if not cell_value:
-                    fmt = yellow
-                elif cell_value in gyldige_svar:
-                    fmt = green
-                    uke_poeng[col_idx-2] += 1
-                else:
-                    fmt = red
-
                 try:
+                    cell_value = sheet.cell(row_idx, col_idx).value
+                    gyldige_svar = (
+                        [riktig_vinner] if riktig_vinner == "Uavgjort" 
+                        else [
+                            v["short"] 
+                            for v in teams.values() 
+                            if v["short"].lower() == riktig_vinner.lower()
+                        ]
+                    )
+
+                    if not cell_value:
+                        fmt = yellow
+                    elif cell_value in gyldige_svar:
+                        fmt = green
+                        uke_poeng[col_idx-2] += 1
+                    else:
+                        fmt = red
+
                     sheet.update_cell(row_idx, col_idx, cell_value if cell_value else "")
                     format_cell(sheet, row_idx, col_idx, fmt)
                 except Exception as e:
-                    print(f"[RESULTATER] FEIL ved celle {row_idx},{col_idx}: {e}")
+                    raise ResultaterError(
+                        f"Feil ved oppdatering av celle {row_idx},{col_idx}: {e}"
+                    ) from e
 
                 await asyncio.sleep(1.5)
 
@@ -370,7 +405,9 @@ class VestskTipping(commands.Cog):
                 sheet.update_cell(uke_total_row, idx, poeng)
                 await asyncio.sleep(1.5)
             except Exception as e:
-                print(f"[RESULTATER] FEIL ved ukespoeng, kolonne {idx}: {e}")
+                raise ResultaterError(
+                    f"Feil ved oppdatering av ukespoeng, kolonne {idx}: {e}"
+                ) from e
 
         # Sesongpoeng
         for idx, discord_id in enumerate(players.keys(), start=2):
@@ -380,10 +417,11 @@ class VestskTipping(commands.Cog):
                 sheet.update_cell(sesong_total_row, idx, prev_val + uke_poeng[idx-2])
                 await asyncio.sleep(1.5)
             except Exception as e:
-                print(f"[RESULTATER] FEIL ved sesongpoeng, kolonne {idx}: {e}")
+                raise ResultaterError(
+                    f"Feil ved oppdatering av sesongpoeng, kolonne {idx}: {e}"
+                ) from e
 
         print("[DEBUG] Ferdig med oppdatering av sheet, sender Discord-melding")
-
 
         # Discord-melding
         header_row = sheet.row_values(1)[1:1+num_players]
