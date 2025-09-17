@@ -1,4 +1,5 @@
 # Fest i Vest Discord Bot
+
 [![CI](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml/badge.svg)](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml)
 
 Discord-bot laget for privat bruk i Fest i Vests server.  
@@ -6,8 +7,6 @@ Botten håndterer vestsk-tipping inkl. integrasjon med Google Sheets og diverse 
 
 ## Filstruktur
 
-    bot.py                # Starter boten og laster cogs
-    keep_alive.py         # Holder boten i live på Render
     credentials.json      # Google Sheets API credentials (i .gitignore)
     .env                  # Miljøvariabler (i .gitignore)
     requirements.txt      # Python dependencies
@@ -21,6 +20,12 @@ Botten håndterer vestsk-tipping inkl. integrasjon med Google Sheets og diverse 
         vestsk_tipping.py   # Tippelek: kamper, eksporter, resultater og påminnelser
         sheets.py           # Hjelpefunksjoner for Google Sheets
         responses.py        # Diverse kommandoer med enkle svar
+
+    core/
+        bot.py                # Starter boten og laster cogs
+        keep_alive.py         # Holder boten i live på Render
+        utils/
+            global_cooldown.py   # Setter en grense på 1 kommando per 5 sekund
 
     data/
         brukere.py          # Kobler navn til lagnavn i FiV
