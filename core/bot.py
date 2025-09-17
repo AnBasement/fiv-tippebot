@@ -1,11 +1,13 @@
 import os
+import asyncio
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from keep_alive import keep_alive
-import asyncio
-import time
 
+from core.keep_alive import keep_alive
+from core.utils.global_cooldown import setup_global_cooldown
+
+# === Last miljøvariabler ===
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -19,38 +21,11 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# === Global cooldown ===
-# 1 kommando per 5 sekunder per bruker
-cooldown = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
-
-@bot.check
-async def global_cooldown(ctx: commands.Context):
-    bucket = cooldown.get_bucket(ctx.message)
-    retry_after = bucket.update_rate_limit()
-    if retry_after:
-        raise commands.CommandOnCooldown(bucket, retry_after, commands.BucketType.user)
-    return True
-
-last_warned = {}
-
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandOnCooldown):
-        now = time.time()
-        uid = ctx.author.id
-        
-        if uid not in last_warned or now - last_warned[uid] > 5:
-            last_warned[uid] = now
-            await ctx.send(
-                f"{ctx.author.mention} e ein liten pissemaur. STRAFFESHOT! "
-                f"(Prøv igjen om {error.retry_after:.1f} sekunder.)"
-            )
-
-    else:
-        raise error
+# Global cooldown for å unngå kommandospam
+setup_global_cooldown(bot)
 
 # === Cogs ===
-cogs = [
+COGS = [
     "cogs.utility",          # ping, småkommandoer
     "cogs.vestsk_tipping",   # kamper, eksporter, resultater
     "cogs.responses",        # forskjellige humorkommandoer
@@ -66,7 +41,7 @@ async def on_ready():
 async def main():
     keep_alive()  # starter Flask-serveren for uptime
     async with bot:
-        for cog in cogs:
+        for cog in COGS:
             try:
                 await bot.load_extension(cog)
                 print(f"[COG] Lastet {cog}")
