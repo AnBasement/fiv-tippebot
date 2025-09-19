@@ -14,7 +14,6 @@ from core.errors import (
     NoEventsFoundError,
     ExportError,
     ResultaterError,
-    ReminderError,
 )
 
 CHANNEL_ID = 752538512250765314 
@@ -26,9 +25,8 @@ class VestskTipping(commands.Cog):
         self.bot = bot
         self.ADMIN_IDS = tuple(os.getenv("ADMIN_IDS", "").split(","))
         self.norsk_tz = pytz.timezone("Europe/Oslo")
-        now = datetime.now(self.norsk_tz)
-        self.last_reminder_week = now.isocalendar()[1]
-        self.last_reminder_sunday = now.date()
+        self.last_reminder_week = None
+        self.last_reminder_sunday = None
         self.reminder_task = self.bot.loop.create_task(self.reminder_scheduler())
 
     def get_players(self, sheet):
@@ -79,114 +77,97 @@ class VestskTipping(commands.Cog):
             await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ "
                f"{home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
 
-    # === reminders task ===
-    async def _send_reminders(self, now, events, channel):
-        """Send søndagspåminnelse før første kamp."""
-
-        # Kun søndagspåminnelse
-        if now.weekday() != 6 or not events:
-            return
-
-        sunday_events = [
-            ev for ev in events
-            if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
-        ]
-        if not sunday_events:
-            raise ReminderError(f"Ingen søndagskamper funnet for dato {now.date()}")
-
-        sunday_events.sort(key=lambda ev: ev.get("date"))
-        first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
-        seconds_to_game = (first_sunday_game - now).total_seconds()
-
-        if self.last_reminder_sunday != first_sunday_game.date() and 3300 <= seconds_to_game <= 3900:  # noqa: E501
-            await channel.send(
-                "@everyone Early window snart, husk <#795485646545748058>!"
-            )
-            self.last_reminder_sunday = first_sunday_game.date()
-            print(f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} ({now})")
-        else:
-            print(
-                f"[DEBUG] Søndagspåminnelse ikke sendt (nå: {now}, "
-                f"kickoff: {first_sunday_game}, diff: {seconds_to_game:.0f}s)"
-            )
-
-
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
         channel = self.bot.get_channel(CHANNEL_ID)
+
         while True:
             now = datetime.now(self.norsk_tz)
             weekday = now.weekday()
 
-            # === Torsdagspåminnelse ===
-            if weekday == 3:
-                week_num = now.isocalendar()[1]
-                reminder_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
-                if now < reminder_time:
-                    sleep_seconds = (reminder_time - now).total_seconds()
-                    await asyncio.sleep(sleep_seconds)
-                    
-                    if self.last_reminder_week != week_num:
-                        await channel.send(
-                            "@everyone RAUÅ I GIR, ukå begynne snart "
-                            "så sjekk <#795485646545748058>!"
-                        )
-
-                        self.last_reminder_week = week_num
-                        print(f"Torsdagspåminnelse sendt for uke {week_num} ({reminder_time})")
-                    
-                    tomorrow = reminder_time + timedelta(days=1)
-                    await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())
-                    continue
-
-            # === Søndagspåminnelse ===
-            if weekday == 6:
-                # Henter kamper fra ESPN API
-                url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-                try:
-                    data = requests.get(url).json()
-                except Exception as e:
-                    raise ReminderError(
-                        f"Kunne ikke hente reminder-data fra ESPN API: {url} ({e})"
-                    ) from e
-
-                events = data.get("events", [])
-                sunday_events = [
-                    ev for ev in events
-                    if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
-                ]
-                if sunday_events:
-                    sunday_events.sort(key=lambda ev: ev.get("date"))
-                    first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
-                    reminder_time = first_sunday_game - timedelta(minutes=60)
+            try:
+                # === Torsdagspåminnelse ===
+                if weekday == 3:
+                    week_num = now.isocalendar()[1]
+                    reminder_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
                     if now < reminder_time:
                         sleep_seconds = (reminder_time - now).total_seconds()
                         await asyncio.sleep(sleep_seconds)
-                        
-                        if self.last_reminder_sunday != first_sunday_game.date():
+
+                        if self.last_reminder_week is None or self.last_reminder_week != week_num:
                             await channel.send(
-                                f"@everyone Early window snart, husk <#795485646545748058>: "
-                                f"{self._format_event(sunday_events[0])}"
+                                "@everyone RAUÅ I GIR, ukå begynne snart "
+                                "så sjekk <#795485646545748058>!"
                             )
-                            self.last_reminder_sunday = first_sunday_game.date()
-                            print(
-                                f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()} "
-                                f"({reminder_time})"
-                            )
-                        
+                            self.last_reminder_week = week_num
+                            print(f"Torsdagspåminnelse sendt for uke {week_num} ({reminder_time})")
+
                         tomorrow = reminder_time + timedelta(days=1)
                         await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())  # noqa: E501
                         continue
 
-            # Regner ut tid til neste vindu
-            next_thursday = now + timedelta(days=(3 - weekday) % 7)
-            next_thursday = next_thursday.replace(hour=18, minute=0, second=0, microsecond=0)
-            next_sunday = now + timedelta(days=(6 - weekday) % 7)
-            next_sunday = next_sunday.replace(hour=8, minute=0, second=0, microsecond=0)
+                # === Søndagspåminnelse ===
+                if weekday == 6:
+                    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 
-            sleep_until = min(next_thursday, next_sunday)
-            sleep_seconds = (sleep_until - now).total_seconds()
-            await asyncio.sleep(max(sleep_seconds, 300))
+                    try:
+                        data = requests.get(url, timeout=10).json()
+                    except Exception as e:
+                        print(
+                            f"[ERROR] Kunne ikke hente data fra ESPN API: {e}. "
+                            "Prøver igjen om 5 min."
+                        )
+                        await asyncio.sleep(300)  # backoff før retry
+                        continue
+
+                    events = data.get("events", [])
+                    sunday_events = [
+                        ev for ev in events
+                        if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6  # noqa: E501
+                    ]
+
+                    if sunday_events:
+                        sunday_events.sort(key=lambda ev: ev.get("date"))
+                        first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
+                        reminder_time = first_sunday_game - timedelta(minutes=60)
+
+                        if now < reminder_time:
+                            sleep_seconds = (reminder_time - now).total_seconds()
+                            await asyncio.sleep(sleep_seconds)
+
+                            if self.last_reminder_sunday is None or self.last_reminder_sunday != first_sunday_game.date():  # noqa: E501
+                                await channel.send(
+                                    f"@everyone Early window snart, husk <#795485646545748058>: "
+                                    f"{self._format_event(sunday_events[0])}"
+                                )
+                                self.last_reminder_sunday = first_sunday_game.date()
+                                print(
+                                    f"[INFO] Søndagspåminnelse sendt for {first_sunday_game.date()}"
+                                    f"({reminder_time})"
+                                )
+
+                            tomorrow = reminder_time + timedelta(days=1)
+                            await asyncio.sleep((tomorrow - datetime.now(self.norsk_tz)).total_seconds())  # noqa: E501
+                            continue
+
+                # === Beregn tid til neste vindu ===
+                next_thursday = now + timedelta(days=(3 - weekday) % 7)
+                next_thursday = next_thursday.replace(hour=18, minute=0, second=0, microsecond=0)
+                if next_thursday <= now:
+                    next_thursday += timedelta(days=7)
+
+                next_sunday = now + timedelta(days=(6 - weekday) % 7)
+                next_sunday = next_sunday.replace(hour=8, minute=0, second=0, microsecond=0)
+                if next_sunday <= now:
+                    next_sunday += timedelta(days=7)
+
+                sleep_until = min(next_thursday, next_sunday)
+                sleep_seconds = (sleep_until - now).total_seconds()
+                await asyncio.sleep(sleep_seconds)
+
+            except Exception as e:
+                print(f"[ERROR] Feil i reminder_scheduler: {e}. Prøver igjen om 5 min.")
+                await asyncio.sleep(300)  # generell backoff før retry
 
     def _format_event(self, ev):
         comps = ev["competitions"][0]["competitors"]

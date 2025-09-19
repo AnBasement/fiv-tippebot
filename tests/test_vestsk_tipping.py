@@ -49,30 +49,3 @@ async def test_resultater_no_events(monkeypatch):
     # Sjekk at riktig exception kastes
     with pytest.raises(NoEventsFoundError):
         await cog._resultater_impl(ctx)
-
-@pytest.mark.asyncio
-async def test_send_sunday_reminder(monkeypatch):
-    bot = MagicMock()
-    channel_mock = AsyncMock()
-    bot.get_channel = MagicMock(return_value=channel_mock)
-
-    cog = VestskTipping.__new__(VestskTipping)
-    cog.bot = bot
-    cog.norsk_tz = pytz.timezone("Europe/Oslo")
-    cog.last_reminder_sunday = None
-
-    # Første søndagskamp, 1 time før
-    now_sunday = datetime(2025, 9, 14, 12, 0, tzinfo=cog.norsk_tz)  # søndag 12:00
-    sunday_game = {
-        "date": (now_sunday + timedelta(minutes=60)).isoformat(),  # kickoff 13:00
-        "competitions": [{"competitors": [
-            {"homeAway": "home", "team": {"displayName": "HomeSun"}},
-            {"homeAway": "away", "team": {"displayName": "AwaySun"}}
-        ]}]
-    }
-
-    await cog._send_reminders(now_sunday, [sunday_game], channel_mock)
-
-    # Sjekk at påminnelsen ble sendt
-    assert channel_mock.send.call_count == 1
-    assert "Early window" in channel_mock.send.call_args[0][0]

@@ -1,3 +1,4 @@
+# Global cooldown for å unngå spam av kommandoer
 import time
 from discord.ext import commands
 
