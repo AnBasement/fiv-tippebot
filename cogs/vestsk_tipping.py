@@ -18,6 +18,11 @@ from core.errors import (
 
 CHANNEL_ID = 752538512250765314 
 
+# === Hjelpefunksjon for å parse ESPN-datoer ===
+def parse_espn_date(datestr: str) -> datetime:
+    # Bytt Z (UTC) til +00:00 så fromisoformat kan tolke det
+    return datetime.fromisoformat(datestr.replace("Z", "+00:00"))
+
 class VestskTipping(commands.Cog):
     """Kommandoer for Vestsk Tipping"""
 
@@ -123,12 +128,12 @@ class VestskTipping(commands.Cog):
                     events = data.get("events", [])
                     sunday_events = [
                         ev for ev in events
-                        if datetime.fromisoformat(ev["date"]).astimezone(self.norsk_tz).weekday() == 6  # noqa: E501
+                        if parse_espn_date(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
                     ]
 
                     if sunday_events:
                         sunday_events.sort(key=lambda ev: ev.get("date"))
-                        first_sunday_game = datetime.fromisoformat(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
+                        first_sunday_game = parse_espn_date(sunday_events[0]["date"]).astimezone(self.norsk_tz)  # noqa: E501
                         reminder_time = first_sunday_game - timedelta(minutes=60)
 
                         if now < reminder_time:
