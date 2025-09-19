@@ -23,12 +23,16 @@ def parse_espn_date(datestr: str) -> datetime:
     # Bytt Z (UTC) til +00:00 så fromisoformat kan tolke det
     return datetime.fromisoformat(datestr.replace("Z", "+00:00"))
 
+# === Ekstern dekorator for admin-only kommandoer ===
+def admin_only():
+    ADMIN_IDS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
+    return commands.check(lambda ctx: str(ctx.author.id) in ADMIN_IDS)
+
 class VestskTipping(commands.Cog):
     """Kommandoer for Vestsk Tipping"""
 
     def __init__(self, bot):
         self.bot = bot
-        self.ADMIN_IDS = tuple(os.getenv("ADMIN_IDS", "").split(","))
         self.norsk_tz = pytz.timezone("Europe/Oslo")
         self.last_reminder_week = None
         self.last_reminder_sunday = None
@@ -45,9 +49,6 @@ class VestskTipping(commands.Cog):
     def cog_unload(self):
         self.reminder_task.cancel()
 
-    def admin_only(self):
-        return commands.check(lambda ctx: str(ctx.author.id) in self.ADMIN_IDS)
-
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         if isinstance(error, CheckFailure):
@@ -55,7 +56,7 @@ class VestskTipping(commands.Cog):
 
     # === kamper ===
     @commands.command()
-    @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
+    @admin_only()
     async def kamper(self, ctx, uke: int = None):
         await self._kamper_impl(ctx, uke)
 
@@ -187,7 +188,7 @@ class VestskTipping(commands.Cog):
 
     # === eksport ===
     @commands.command(name="eksporter")
-    @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
+    @admin_only()
     async def export(self, ctx, uke: int = None):
         await self._export_impl(ctx, uke)
 
@@ -262,7 +263,7 @@ class VestskTipping(commands.Cog):
 
     # === resultater ===
     @commands.command(name="resultater")
-    @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
+    @admin_only()
     async def resultater(self, ctx, uke: int = None):
 
         print(f"[DEBUG] Kommando !resultater kjørt for uke={uke}")
