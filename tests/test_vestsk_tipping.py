@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from cogs.vestsk_tipping import VestskTipping
-from core.errors import NoEventsFoundError, ExportError
-from datetime import datetime, timedelta
+from core.errors import NoEventsFoundError
 import pytz
 from data.teams import teams
 from discord.ext.commands import CheckFailure
