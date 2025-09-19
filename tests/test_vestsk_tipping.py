@@ -142,6 +142,9 @@ async def test_resultater_builds_url_with_week_and_sends_messages(monkeypatch):
     # Gjør sleep no-op
     monkeypatch.setattr("asyncio.sleep", lambda *a, **kw: AsyncMock())
 
+    # Mock Google Sheets client slik at credentials ikke trengs
+    monkeypatch.setattr("cogs.sheets.get_client", lambda: MagicMock())
+
     # Mock Sheets-tilgang og formatering til no-op
     mock_sheet = MagicMock()
     mock_sheet.title = "Vestsk Tipping"
