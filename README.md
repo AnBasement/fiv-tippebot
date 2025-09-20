@@ -1,6 +1,6 @@
 # Fest i Vest Discord Bot
 
-[![CI](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml/badge.svg)](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml)
+[![CI](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml/badge.svg)](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml) [![codecov](https://codecov.io/gh/AnBasement/fiv-tippebot/branch/main/graph/badge.svg?token=NRAJ4ITBQ0)](https://codecov.io/gh/AnBasement/fiv-tippebot)
 
 Discord-bot laget for privat bruk i Fest i Vests server.  
 Botten håndterer vestsk-tipping inkl. integrasjon med Google Sheets og diverse kommandoer.
