@@ -40,21 +40,21 @@ def format_cell(sheet, row, col, color_fmt):
     format_cell_range(sheet, f"{col_letter}{row}", color_fmt)
 
 def green_format():
-    """Returnerer grønn bakgrunn for celler (batchUpdate-format)."""
+    """Returnerer grønn bakgrunn for celler."""
     return {
         "backgroundColor": {"red": 0, "green": 1, "blue": 0},
         "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
     }
 
 def red_format():
-    """Returnerer rød bakgrunn for celler (batchUpdate-format)."""
+    """Returnerer rød bakgrunn for celler."""
     return {
         "backgroundColor": {"red": 1, "green": 0, "blue": 0},
         "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
     }
 
 def yellow_format():
-    """Returnerer gul bakgrunn for celler (batchUpdate-format)."""
+    """Returnerer gul bakgrunn for celler."""
     return {
         "backgroundColor": {"red": 1, "green": 1, "blue": 0},
         "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
