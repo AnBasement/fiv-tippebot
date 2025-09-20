@@ -23,11 +23,27 @@ async def test_resultater_no_events(monkeypatch):
     monkeypatch.setattr("cogs.sheets.yellow_format", lambda: "yellow")
     monkeypatch.setattr("cogs.sheets.format_cell", lambda *a, **kw: None)
 
-    # Mock requests til å returnere tom events-liste
-    class DummyResp:
-        def json(self):
+    # Mock aiohttp.ClientSession for tom events-liste
+    class DummyAiohttpResponse:
+        async def json(self):
             return {"events": []}
-    monkeypatch.setattr("cogs.vestsk_tipping.requests.get", lambda *a, **kw: DummyResp())
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummyAiohttpSession:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        def get(self, url, *args, **kwargs):
+            return DummyAiohttpResponse()
+
+    monkeypatch.setattr(
+        "cogs.vestsk_tipping.aiohttp.ClientSession",
+        lambda *a, **kw: DummyAiohttpSession(),
+    )
 
     # Opprett cog uten å kjøre __init__
     cog = VestskTipping.__new__(VestskTipping)
@@ -183,9 +199,9 @@ async def test_reminder_scheduler_sunday(monkeypatch):
             return datetime.fromisoformat(s)
     monkeypatch.setattr(vt_mod, "datetime", FixedDateTime)
 
-    # Patch requests.get to return a Sunday event at 17:00 UTC (19:00 local)
-    class DummyResp:
-        def json(self):
+    # Patch aiohttp.ClientSession to return a Sunday event at 17:00 UTC (19:00 local)
+    class DummyAiohttpResponse:
+        async def json(self):
             return {
                 "events": [
                     {
@@ -194,11 +210,11 @@ async def test_reminder_scheduler_sunday(monkeypatch):
                             {
                                 "competitors": [
                                     {
-                                        "homeAway": "home", 
+                                        "homeAway": "home",
                                         "team": {"displayName": "New York Giants"}
                                     },
                                     {
-                                        "homeAway": "away", 
+                                        "homeAway": "away",
                                         "team": {"displayName": "New England Patriots"}
                                     },
                                 ]
@@ -207,7 +223,23 @@ async def test_reminder_scheduler_sunday(monkeypatch):
                     }
                 ]
             }
-    monkeypatch.setattr("cogs.vestsk_tipping.requests.get", lambda *a, **kw: DummyResp())
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummyAiohttpSession:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        def get(self, url, *args, **kwargs):
+            return DummyAiohttpResponse()
+
+    monkeypatch.setattr(
+        "cogs.vestsk_tipping.aiohttp.ClientSession",
+        lambda *a, **kw: DummyAiohttpSession(),
+    )
 
     # Act & Assert
     with pytest.raises(SystemExit):
