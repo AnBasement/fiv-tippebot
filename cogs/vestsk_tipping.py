@@ -8,7 +8,7 @@ import asyncio
 import os
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from cogs.sheets import get_sheet, green_format, red_format, yellow_format, format_cell
+from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 from core.errors import (
     APIFetchError,
     NoEventsFoundError,
@@ -42,7 +42,7 @@ class VestskTipping(commands.Cog):
         """Returnerer mapping: Discord ID → kolonne"""
         id_row = sheet.row_values(2)
         # Hopp over kolonne A (index 0), start fra B (index 1)
-        players = {id_row[i]: i+1 for i in range(1, len(id_row)) if id_row[i]}
+        players = {id_row[i]: i for i in range(1, len(id_row)) if id_row[i]}
         print(f"[DEBUG] get_players: {players}")
         return players
 
@@ -345,6 +345,7 @@ class VestskTipping(commands.Cog):
         print(f"[DEBUG] Spillere funnet: {players}")
         num_players = len(players)
 
+        # Hent alle relevante rader og kolonner i én batch
         sheet_rows = (await asyncio.to_thread(sheet.get_all_values))[2:]
         sheet_kamper = []
         row_mapping = {}
@@ -366,73 +367,135 @@ class VestskTipping(commands.Cog):
 
         uke_poeng = [0] * num_players
 
+        # Kolonneindekser: discord_id → col_idx (start på 2, men batch-read starter på 2)
+        player_ids = list(players.keys())
+        start_col = 2
+        end_col = start_col + num_players - 1
+        start_row = min(row_mapping.values(), default=3)
+        end_row = max(row_mapping.values(), default=3)
+
+        # Hent alle celler for kampdata i én batch
+        kamp_cell_range = await asyncio.to_thread(
+            sheet.range,
+            start_row,
+            start_col,
+            end_row,
+            end_col
+        )
+        # Lag mapping: (row_idx, col_idx) -> cell_obj
+        cell_map = {(cell.row, cell.col): cell for cell in kamp_cell_range}
+
+        cell_updates = []
+        format_updates = []
+
         for idx, kampkode in enumerate(sheet_kamper):
             row_idx = row_mapping[idx]
             riktig_vinner = kamp_resultater.get(kampkode)
             print(f"[DEBUG] Prosesserer kamp {kampkode} (riktig vinner: {riktig_vinner})")
 
-            for col_idx, discord_id in enumerate(players.keys(), start=2):
-                try:
-                    cell_value = (await asyncio.to_thread(sheet.cell, row_idx, col_idx)).value
-                    gyldige_svar = (
-                        [riktig_vinner] if riktig_vinner == "Uavgjort" 
-                        else [
-                            v["short"] 
-                            for v in teams.values() 
-                            if v["short"].lower() == riktig_vinner.lower()
-                        ]
-                    )
+            for pidx, discord_id in enumerate(player_ids):
+                col_idx = start_col + pidx
+                cell_obj = cell_map.get((row_idx, col_idx))
+                if cell_obj is None:
+                    continue
+                cell_value = cell_obj.value
+                gyldige_svar = (
+                    [riktig_vinner] if riktig_vinner == "Uavgjort" 
+                    else [
+                        v["short"] 
+                        for v in teams.values() 
+                        if v["short"].lower() == riktig_vinner.lower()
+                    ]
+                )
 
-                    if not cell_value:
-                        fmt = yellow
-                    elif cell_value in gyldige_svar:
-                        fmt = green
-                        uke_poeng[col_idx-2] += 1
-                    else:
-                        fmt = red
+                if not cell_value:
+                    fmt = yellow
+                elif cell_value in gyldige_svar:
+                    fmt = green
+                    uke_poeng[pidx] += 1
+                else:
+                    fmt = red
 
-                    await asyncio.to_thread(
-                        sheet.update_cell,
-                        row_idx,
-                        col_idx,
-                        cell_value if cell_value else "",
-                    )
-                    await asyncio.to_thread(format_cell, sheet, row_idx, col_idx, fmt)
-                except Exception as e:
-                    raise ResultaterError(
-                        f"Feil ved oppdatering av celle {row_idx},{col_idx}: {e}"
-                    ) from e
-
-                await asyncio.sleep(1.5)
+                # Oppdater kun hvis verdi har endret seg
+                new_value = cell_value if cell_value else ""
+                if cell_obj.value != new_value:
+                    cell_obj.value = new_value
+                    cell_updates.append(cell_obj)
+                format_updates.append((row_idx, col_idx, fmt))
 
         print(f"[DEBUG] Ukespoeng: {uke_poeng}")
 
-        # Ukespoeng
-        for idx, poeng in enumerate(uke_poeng, start=2):
-            try:
-                await asyncio.to_thread(sheet.update_cell, uke_total_row, idx, poeng)
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                raise ResultaterError(
-                    f"Feil ved oppdatering av ukespoeng, kolonne {idx}: {e}"
-                ) from e
+        # Ukespoeng og sesongpoeng batch-read og batch-write
+        uke_poeng_cells = await asyncio.to_thread(
+            sheet.range,
+            uke_total_row,
+            start_col,
+            uke_total_row,
+            end_col
+        )
+        for pidx, cell_obj in enumerate(uke_poeng_cells):
+            poeng = uke_poeng[pidx]
+            if str(cell_obj.value) != str(poeng):
+                cell_obj.value = poeng
+                cell_updates.append(cell_obj)
 
-        # Sesongpoeng
-        for idx, discord_id in enumerate(players.keys(), start=2):
+        # Sesongpoeng: rad sesong_total_row, kolonner start_col -> end_col
+        sesong_poeng_cells = await asyncio.to_thread(
+            sheet.range,
+            sesong_total_row,
+            start_col,
+            sesong_total_row,
+            end_col
+        )
+        for pidx, cell_obj in enumerate(sesong_poeng_cells):
+            prev = cell_obj.value
+            prev_val = int(prev) if prev and str(prev).isdigit() else 0
+            new_val = prev_val + uke_poeng[pidx]
+            if str(cell_obj.value) != str(new_val):
+                cell_obj.value = new_val
+                cell_updates.append(cell_obj)
+
+        # === Batch update alle celler ===
+        if cell_updates:
             try:
-                prev = (await asyncio.to_thread(sheet.cell, sesong_total_row, idx)).value
-                prev_val = int(prev) if prev and prev.isdigit() else 0
-                await asyncio.to_thread(
-                    sheet.update_cell,
-                    sesong_total_row,
-                    idx,
-                    prev_val + uke_poeng[idx-2],
-                )
-                await asyncio.sleep(1.5)
+                await asyncio.to_thread(sheet.update_cells, cell_updates)
             except Exception as e:
-                raise ResultaterError(
-                    f"Feil ved oppdatering av sesongpoeng, kolonne {idx}: {e}"
-                ) from e
+                raise ResultaterError(f"Feil ved batch-oppdatering av celler: {e}") from e
+
+        # === Batch formatering med batchUpdate ===
+        # Bruk green_format/red_format/yellow_format for batchUpdate.
+        # Finn sheetId for arket
+        try:
+            sheet_id = sheet._properties['sheetId']
+        except Exception as e:
+            raise ResultaterError(f"Kunne ikke hente sheetId: {e}")
+
+        # Lag batchUpdate-requests for alle celler som skal formateres
+        requests = []
+        for row_idx, col_idx, fmt in format_updates:
+            # fmt er cellFormat-dict, f.eks. fra green_format()
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": row_idx-1,
+                        "endRowIndex": row_idx,
+                        "startColumnIndex": col_idx-1,
+                        "endColumnIndex": col_idx
+                    },
+                    "cell": {"userEnteredFormat": fmt},
+                    "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat"
+                }
+            })
+
+        if requests:
+            try:
+                await asyncio.to_thread(
+                    sheet.spreadsheet.batch_update,
+                    {"requests": requests}
+                )
+            except Exception as e:
+                raise ResultaterError(f"Feil ved batch-formattering av celler: {e}")
 
         print("[DEBUG] Ferdig med oppdatering av sheet, sender Discord-melding")
 
@@ -442,7 +505,7 @@ class VestskTipping(commands.Cog):
         for idx, name in enumerate(header_row, start=2):
             uke_p = uke_poeng[idx-2]
             sesong_p_cell = (await asyncio.to_thread(sheet.cell, sesong_total_row, idx)).value
-            sesong_p = int(sesong_p_cell) if sesong_p_cell and sesong_p_cell.isdigit() else 0
+            sesong_p = int(sesong_p_cell) if sesong_p_cell and str(sesong_p_cell).isdigit() else 0
             discord_msg.append((name, uke_p, sesong_p))
 
         discord_msg.sort(key=lambda x: x[1], reverse=True)
