@@ -1,6 +1,6 @@
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
-import requests
+import aiohttp
 from datetime import datetime, timedelta
 import pytz
 import re
@@ -65,7 +65,9 @@ class VestskTipping(commands.Cog):
         url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
                if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
         try:
-            data = requests.get(url).json()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    data = await resp.json()
         except Exception as e:
             raise APIFetchError(url, e) from e
 
@@ -117,7 +119,9 @@ class VestskTipping(commands.Cog):
                     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 
                     try:
-                        data = requests.get(url, timeout=10).json()
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(url, timeout=10) as resp:
+                                data = await resp.json()
                     except Exception as e:
                         print(
                             f"[ERROR] Kunne ikke hente data fra ESPN API: {e}. "
@@ -193,8 +197,7 @@ class VestskTipping(commands.Cog):
         await self._export_impl(ctx, uke)
 
     async def _export_impl(self, ctx, uke: int = None):
-
-        sheet = get_sheet("Vestsk Tipping")
+        sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
         channel = ctx.channel
 
         players = self.get_players(sheet)
@@ -243,17 +246,23 @@ class VestskTipping(commands.Cog):
                             row[col_idx] = emoji_to_team_short.get(emoji_str, "")
             values.append(row)
 
-        all_rows_colA = sheet.col_values(1)
+        all_rows_colA = await asyncio.to_thread(sheet.col_values, 1)
         last_data_row = len(all_rows_colA)
         start_row = last_data_row + 2
 
         if values:
             try:
-                cell_range = sheet.range(start_row, 1, start_row + len(values) - 1, 1 + num_players)
+                cell_range = await asyncio.to_thread(
+                    sheet.range,
+                    start_row,
+                    1,
+                    start_row + len(values) - 1,
+                    1 + num_players,
+                )
                 flat_values = [cell for row in values for cell in row]
                 for cell_obj, val in zip(cell_range, flat_values):
                     cell_obj.value = val
-                sheet.update_cells(cell_range)
+                await asyncio.to_thread(sheet.update_cells, cell_range)
             except Exception as e:
                 raise ExportError(f"Feil ved eksport til sheet '{sheet.title}': {e}") from e
 
@@ -271,7 +280,7 @@ class VestskTipping(commands.Cog):
 
     async def _resultater_impl(self, ctx, uke: int = None):
         try:
-            sheet = get_sheet("Vestsk Tipping")
+            sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
             if not sheet:
                 raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
         except Exception as e:
@@ -289,7 +298,9 @@ class VestskTipping(commands.Cog):
         print(f"[DEBUG] Henter URL: {url}")
 
         try:
-            data = requests.get(url).json()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    data = await resp.json()
         except Exception as e:
             raise APIFetchError(url, e)
 
@@ -305,8 +316,14 @@ class VestskTipping(commands.Cog):
                 comps = ev["competitions"][0]["competitors"]
                 home = next(c for c in comps if c["homeAway"] == "home")
                 away = next(c for c in comps if c["homeAway"] == "away")
-                home_team = team_location.get(home["team"]["displayName"], home["team"]["displayName"].split()[-1])  # noqa: E501
-                away_team = team_location.get(away["team"]["displayName"], away["team"]["displayName"].split()[-1])  # noqa: E501
+                home_team = team_location.get(
+                    home["team"]["displayName"],
+                    home["team"]["displayName"].split()[-1],
+                )
+                away_team = team_location.get(
+                    away["team"]["displayName"],
+                    away["team"]["displayName"].split()[-1],
+                )
                 kampkode = f"{away_team}@{home_team}"
 
                 home_score = int(home["score"])
@@ -315,7 +332,6 @@ class VestskTipping(commands.Cog):
                 raise ResultaterError(
                     f"Feil ved parsing av kampdata for {ev.get('id', 'ukjent')}"
                 ) from e
-
 
             if home_score > away_score:
                 kamp_resultater[kampkode] = home_team
@@ -329,7 +345,7 @@ class VestskTipping(commands.Cog):
         print(f"[DEBUG] Spillere funnet: {players}")
         num_players = len(players)
 
-        sheet_rows = sheet.get_all_values()[2:]
+        sheet_rows = (await asyncio.to_thread(sheet.get_all_values))[2:]
         sheet_kamper = []
         row_mapping = {}
         for i, row in enumerate(sheet_rows, start=3):
@@ -357,7 +373,7 @@ class VestskTipping(commands.Cog):
 
             for col_idx, discord_id in enumerate(players.keys(), start=2):
                 try:
-                    cell_value = sheet.cell(row_idx, col_idx).value
+                    cell_value = (await asyncio.to_thread(sheet.cell, row_idx, col_idx)).value
                     gyldige_svar = (
                         [riktig_vinner] if riktig_vinner == "Uavgjort" 
                         else [
@@ -375,8 +391,13 @@ class VestskTipping(commands.Cog):
                     else:
                         fmt = red
 
-                    sheet.update_cell(row_idx, col_idx, cell_value if cell_value else "")
-                    format_cell(sheet, row_idx, col_idx, fmt)
+                    await asyncio.to_thread(
+                        sheet.update_cell,
+                        row_idx,
+                        col_idx,
+                        cell_value if cell_value else "",
+                    )
+                    await asyncio.to_thread(format_cell, sheet, row_idx, col_idx, fmt)
                 except Exception as e:
                     raise ResultaterError(
                         f"Feil ved oppdatering av celle {row_idx},{col_idx}: {e}"
@@ -389,7 +410,7 @@ class VestskTipping(commands.Cog):
         # Ukespoeng
         for idx, poeng in enumerate(uke_poeng, start=2):
             try:
-                sheet.update_cell(uke_total_row, idx, poeng)
+                await asyncio.to_thread(sheet.update_cell, uke_total_row, idx, poeng)
                 await asyncio.sleep(1.5)
             except Exception as e:
                 raise ResultaterError(
@@ -399,9 +420,14 @@ class VestskTipping(commands.Cog):
         # Sesongpoeng
         for idx, discord_id in enumerate(players.keys(), start=2):
             try:
-                prev = sheet.cell(sesong_total_row, idx).value
+                prev = (await asyncio.to_thread(sheet.cell, sesong_total_row, idx)).value
                 prev_val = int(prev) if prev and prev.isdigit() else 0
-                sheet.update_cell(sesong_total_row, idx, prev_val + uke_poeng[idx-2])
+                await asyncio.to_thread(
+                    sheet.update_cell,
+                    sesong_total_row,
+                    idx,
+                    prev_val + uke_poeng[idx-2],
+                )
                 await asyncio.sleep(1.5)
             except Exception as e:
                 raise ResultaterError(
@@ -411,11 +437,11 @@ class VestskTipping(commands.Cog):
         print("[DEBUG] Ferdig med oppdatering av sheet, sender Discord-melding")
 
         # Discord-melding
-        header_row = sheet.row_values(1)[1:1+num_players]
+        header_row = (await asyncio.to_thread(sheet.row_values, 1))[1:1+num_players]
         discord_msg = []
         for idx, name in enumerate(header_row, start=2):
             uke_p = uke_poeng[idx-2]
-            sesong_p_cell = sheet.cell(sesong_total_row, idx).value
+            sesong_p_cell = (await asyncio.to_thread(sheet.cell, sesong_total_row, idx)).value
             sesong_p = int(sesong_p_cell) if sesong_p_cell and sesong_p_cell.isdigit() else 0
             discord_msg.append((name, uke_p, sesong_p))
 
