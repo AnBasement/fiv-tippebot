@@ -6,6 +6,14 @@ from core.errors import NoEventsFoundError, ExportError
 from datetime import datetime
 import pytz
 
+@pytest.fixture(autouse=True)
+def mock_google_credentials(monkeypatch):
+    """Mock Google Sheets client so no credentials.json is needed."""
+    # Mock get_client slik at ingen creds trengs
+    monkeypatch.setattr(sheets, "get_client", lambda: MagicMock())
+    # Mock get_sheet slik at alle tester får et dummy sheet
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": MagicMock())
+
 def test_format_event_simple():
     cog = VestskTipping.__new__(VestskTipping)
     # _format_event expects a dict with string values or ESPN API structure
@@ -37,7 +45,6 @@ async def test_export_handles_no_events(monkeypatch):
     # Monkeypatch get_sheet til å være en vanlig funksjon som returnerer sheet
     def fake_get_sheet(name="Vestsk Tipping"):
         return sheet
-    monkeypatch.setattr(sheets, "get_sheet", fake_get_sheet)
 
     # Sett opp sheet mocks
     sheet.col_values.return_value = [""]
@@ -188,7 +195,6 @@ async def test_export_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resultater_no_events(monkeypatch):
-    monkeypatch.setattr("cogs.sheets.get_client", lambda: MagicMock())
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
     mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
@@ -326,14 +332,11 @@ def test_is_valid_game_message():
 
 @pytest.mark.asyncio
 async def test_resultater_no_events_api(monkeypatch):
-    # Mock Google Sheets client slik at credentials ikke trengs
-    monkeypatch.setattr("cogs.sheets.get_client", lambda: MagicMock())
     
     # Mock get_sheet til å returnere et dummy sheet
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
     mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
-    monkeypatch.setattr("cogs.sheets.get_sheet", lambda name="Vestsk Tipping": mock_sheet)
 
     # Mock formateringsfunksjoner
     monkeypatch.setattr("cogs.sheets.green_format", lambda: "green")
