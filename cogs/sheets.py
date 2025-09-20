@@ -3,7 +3,7 @@
 import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from gspread_formatting import cellFormat, format_cell_range, color
+from gspread_formatting import format_cell_range
 
 from core.errors import MissingCredentialsError, ClientAuthorizationError, SheetNotFoundError
 
@@ -40,13 +40,22 @@ def format_cell(sheet, row, col, color_fmt):
     format_cell_range(sheet, f"{col_letter}{row}", color_fmt)
 
 def green_format():
-    """Returnerer grønn bakgrunn for celler."""
-    return cellFormat(backgroundColor=color(0, 1, 0))
+    """Returnerer grønn bakgrunn for celler (batchUpdate-format)."""
+    return {
+        "backgroundColor": {"red": 0, "green": 1, "blue": 0},
+        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+    }
 
 def red_format():
-    """Returnerer rød bakgrunn for celler."""
-    return cellFormat(backgroundColor=color(1, 0, 0))
+    """Returnerer rød bakgrunn for celler (batchUpdate-format)."""
+    return {
+        "backgroundColor": {"red": 1, "green": 0, "blue": 0},
+        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+    }
 
 def yellow_format():
-    """Returnerer gul bakgrunn for celler."""
-    return cellFormat(backgroundColor=color(1, 1, 0))
+    """Returnerer gul bakgrunn for celler (batchUpdate-format)."""
+    return {
+        "backgroundColor": {"red": 1, "green": 1, "blue": 0},
+        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+    }
