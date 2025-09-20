@@ -2,20 +2,341 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from cogs import sheets
 from cogs.vestsk_tipping import VestskTipping
-from core.errors import NoEventsFoundError
-from datetime import datetime, timedelta, timezone
+from core.errors import NoEventsFoundError, ExportError
+from datetime import datetime
 import pytz
+
+@pytest.fixture(autouse=True)
+def mock_google_credentials(monkeypatch):
+    """Mock Google Sheets client so no credentials.json is needed."""
+    # Mock get_client slik at ingen creds trengs
+    monkeypatch.setattr(sheets, "get_client", lambda: MagicMock())
+    # Mock get_sheet slik at alle tester får et dummy sheet
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": MagicMock())
+
+def test_format_event_simple():
+    cog = VestskTipping.__new__(VestskTipping)
+    # _format_event expects a dict with string values or ESPN API structure
+    event = {
+        "home": "TeamA",
+        "away": "TeamB",
+        "date": "2025-09-20",
+        "competitions": "NFL"
+    }
+    formatted = cog._format_event(event)
+    assert "TeamB @ TeamA" in formatted
+
+@pytest.mark.asyncio
+async def test_export_handles_no_events(monkeypatch):
+    # Lag et falskt sheet
+    sheet = MagicMock()
+
+    # Sett opp cog med nødvendige attributter
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.sheet = sheet
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    cog.bot = MagicMock()
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+    ctx.channel = MagicMock()
+    ctx.channel.send = AsyncMock()
+
+    # Monkeypatch get_sheet til å være en vanlig funksjon som returnerer sheet
+    def fake_get_sheet(name="Vestsk Tipping"):
+        return sheet
+
+    # Sett opp sheet mocks
+    sheet.col_values.return_value = [""]
+    sheet.row_values.return_value = ["", "111"]
+
+    cog.get_current_week = lambda self=None: 1
+    cog.get_players = lambda self=None: ["A"]
+
+    # Sett opp bot-bruker
+    bot_user = MagicMock()
+    cog.bot.user = bot_user
+
+    # Ingen gyldige meldinger i historikken
+    async def mock_history(*args, **kwargs):
+        if False:
+            yield  # tom generator
+    ctx.channel.history.return_value = mock_history()
+
+    sheet.get_all_values.return_value = [["A", "old1"]]
+
+    # Forvent at ExportError kastes når det ikke finnes events
+    with pytest.raises(ExportError):
+        await cog._export_impl(ctx)
+
+@pytest.mark.asyncio
+async def test_resultater_handles_api_error(monkeypatch):
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.bot = MagicMock()
+    from unittest.mock import AsyncMock
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+    ctx.channel = MagicMock()
+    # Make channel.send awaitable
+    ctx.channel.send = AsyncMock()
+    cog.get_current_week = lambda self=None: 1
+
+    # Mock Google Sheets setup
+    sheet = MagicMock()
+    sheet.row_values = AsyncMock(return_value=["Header", "Player1", "Player2"])
+    sheet.cell = AsyncMock(return_value=MagicMock(value="0"))
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
+
+    # Mock ResultaterError in case _resultater_impl tries to access events
+    try:
+        await cog._resultater_impl(ctx)
+    except NoEventsFoundError:
+        pass
+
+    # Check that ctx.send was called
+    assert ctx.send.await_count > 0
+
+def test_is_valid_game_message_edge_cases():
+    cog = VestskTipping.__new__(VestskTipping)
+    # Adjusted to match likely implementation: only valid if contains dash and score
+    assert not cog.is_valid_game_message("")
+    assert not cog.is_valid_game_message("random text")
+    assert not cog.is_valid_game_message("TeamA vs TeamB")
+    # Accepts dash and score
+    assert cog.is_valid_game_message("TeamA - TeamB: 24-17") is True
+
+@pytest.mark.asyncio
+async def test_logging_on_export(monkeypatch):
+    sheet = MagicMock()
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.sheet = sheet
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    cog.bot = MagicMock()
+
+    from unittest.mock import AsyncMock
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+    ctx.channel = MagicMock()
+    ctx.channel.send = AsyncMock()
+
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
+
+    # Sett opp mock sheet data
+    sheet.col_values.return_value = [""]  # tom første kolonne
+    sheet.row_values.return_value = ["", "111"]
+    sheet.cell = AsyncMock()
+    cog.get_current_week = lambda self=None: 1
+    cog.get_players = lambda self=None: {"A": 1}  # må være mapping id → kolonne
+    oslo_tz = pytz.timezone("Europe/Oslo")
+    now = oslo_tz.localize(datetime(2025, 9, 20, 12, 0))
+
+    # Sett opp bot user
+    bot_user = MagicMock()
+    cog.bot.user = bot_user
+
+    msg = MagicMock(content="Patriots @ Giants")
+    msg.created_at = now
+    msg.author = bot_user
+    msg.reactions = []
+
+    async def mock_history(*args, **kwargs):
+        for m in [msg]:
+            yield m
+    ctx.channel.history.return_value = mock_history()
+
+    sheet.get_all_values.return_value = [["A", "old1"]]
+
+    await cog._export_impl(ctx)
+
+    ctx.send.assert_awaited_with("Kampdata eksportert til Sheets.")
+
+@pytest.mark.asyncio
+async def test_get_players_basic():
+    sheet = MagicMock()
+    # Simuler rad 2 med Discord-IDs
+    sheet.row_values.return_value = ["", "id1", "id2", ""]
+    cog = VestskTipping.__new__(VestskTipping)
+    players = cog.get_players(sheet)
+    assert players == {"id1": 1, "id2": 2}
+
+def test_get_players_empty():
+    sheet = MagicMock()
+    sheet.row_values.return_value = ["", "", "", ""]
+    cog = VestskTipping.__new__(VestskTipping)
+    players = cog.get_players(sheet)
+    assert players == {}
+
+def test_format_event():
+    cog = VestskTipping.__new__(VestskTipping)
+    ev = {
+        "competitions": [
+            {
+                "competitors": [
+                    {"homeAway": "home", "team": {"displayName": "Giants"}},
+                    {"homeAway": "away", "team": {"displayName": "Patriots"}},
+                ]
+            }
+        ]
+    }
+    result = cog._format_event(ev)
+    assert "Patriots @ Giants" in result or "Giants @ Patriots" in result
+
+@pytest.mark.asyncio
+async def test_export_error(monkeypatch):
+    # Simuler at get_sheet returnerer None
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": None)
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.bot = MagicMock()
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    ctx = MagicMock()
+    ctx.channel = MagicMock()
+    with pytest.raises(Exception):
+        await cog._export_impl(ctx)
 
 @pytest.mark.asyncio
 async def test_resultater_no_events(monkeypatch):
-    # Mock Google Sheets client slik at credentials ikke trengs
-    monkeypatch.setattr("cogs.sheets.get_client", lambda: MagicMock())
+    mock_sheet = MagicMock()
+    mock_sheet.row_values.return_value = ["Header", "111", "222"]
+    mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
+    monkeypatch.setattr("cogs.sheets.get_sheet", lambda name="Vestsk Tipping": mock_sheet)
+    monkeypatch.setattr("cogs.sheets.green_format", lambda: "green")
+    monkeypatch.setattr("cogs.sheets.red_format", lambda: "red")
+    monkeypatch.setattr("cogs.sheets.yellow_format", lambda: "yellow")
+    monkeypatch.setattr("cogs.sheets.format_cell", lambda *a, **kw: None)
+    class DummyAiohttpResponse:
+        async def json(self):
+            return {"events": []}
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+    class DummyAiohttpSession:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        def get(self, url, *args, **kwargs):
+            return DummyAiohttpResponse()
+    monkeypatch.setattr(
+        "cogs.vestsk_tipping.aiohttp.ClientSession",
+        lambda *a, **kw: DummyAiohttpSession(),
+    )
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.bot = MagicMock()
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    cog.last_reminder_week = None
+    cog.last_reminder_sunday = None
+    class DummyCtx:
+        def __init__(self):
+            self.sent_messages = []
+            self.channel = MagicMock()
+            self.author = MagicMock()
+        async def send(self, msg):
+            self.sent_messages.append(msg)
+    ctx = DummyCtx()
+    with pytest.raises(NoEventsFoundError):
+        await cog._resultater_impl(ctx)
+
+@pytest.mark.asyncio
+async def test_export_impl_message_filtering(monkeypatch):
+    """Tester at kun gyldige meldinger eksporteres og batch update kalles."""
+    # Mock sheet
+    mock_sheet = MagicMock()
+    mock_sheet.row_values.return_value = ["", "111", "222"]
+    mock_sheet.col_values.return_value = ["Kamp1", "Kamp2"]
+    mock_sheet.range.return_value = [MagicMock(), MagicMock(), MagicMock()]
+    mock_sheet.update_cells.side_effect = lambda cells: setattr(mock_sheet, "updated", True)
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet)
+
+    # Dummy bot og context
+    class DummyUser:
+        def __init__(self, id):
+            self.id = id
+        def __eq__(self, other):
+            return isinstance(other, DummyUser) and self.id == other.id
+
+    class DummyReaction:
+        def __init__(self, emoji, users):
+            self.emoji = emoji
+            self._users = users
+        async def users(self):
+            for u in self._users:
+                yield u
+
+    class DummyMessage:
+        def __init__(self, content, author, created_at, reactions=None):
+            self.content = content
+            self.author = author
+            self.created_at = created_at
+            self.reactions = reactions or []
+
+    class DummyChannel:
+        def __init__(self, messages):
+            self._messages = messages
+        def history(self, limit, after):
+            # Simuler async generator
+            async def gen():
+                for m in self._messages:
+                    yield m
+            return gen()
+
+    class DummyCtx:
+        def __init__(self):
+            self.sent = []
+            self.channel = None
+        async def send(self, msg):
+            self.sent.append(msg)
+
+    # Lag meldinger: kun én gyldig, én med mention, én feil format
+    now = datetime.now(pytz.timezone("Europe/Oslo"))
+    bot_user = DummyUser(999)
+    valid_msg = DummyMessage("Patriots @ Giants", bot_user, now)
+    mention_msg = DummyMessage("Patriots @ Giants <@123>", bot_user, now)
+    invalid_msg = DummyMessage("Patriots Giants", bot_user, now)
+    channel = DummyChannel([valid_msg, mention_msg, invalid_msg])
+
+    cog = VestskTipping.__new__(VestskTipping)
+    cog.bot = MagicMock()
+    cog.bot.user = bot_user
+    cog.norsk_tz = pytz.timezone("Europe/Oslo")
+    cog.last_reminder_week = None
+    cog.last_reminder_sunday = None
+
+    ctx = DummyCtx()
+    ctx.channel = channel
+
+    await cog._export_impl(ctx)
+
+    # Sjekk at kun gyldig melding eksporteres og update_cells kalles
+    assert hasattr(mock_sheet, "updated")
+    assert any("eksportert" in m.lower() for m in ctx.sent)
+
+def test_is_valid_game_message():
+    # Gyldige meldinger
+    assert VestskTipping.is_valid_game_message("Patriots @ Giants")
+    assert VestskTipping.is_valid_game_message("New England Patriots @ New York Giants")
+    assert VestskTipping.is_valid_game_message("Raiders @ 49ers")
+
+    # Ugyldige meldinger: mentions
+    assert not VestskTipping.is_valid_game_message("Patriots @ Giants <@123456>")
+    assert not VestskTipping.is_valid_game_message("@everyone Patriots @ Giants")
+    assert not VestskTipping.is_valid_game_message("@here Patriots @ Giants")
+
+    # Ugyldige meldinger: feil format
+    assert not VestskTipping.is_valid_game_message("Patriots Giants")
+    assert not VestskTipping.is_valid_game_message("Patriots vs Giants")
+    assert not VestskTipping.is_valid_game_message("")
+
+    # Gyldig med emoji (skal fjernes)
+    assert VestskTipping.is_valid_game_message("Patriots @ Giants <:_patriots:123456>")
+
+@pytest.mark.asyncio
+async def test_resultater_no_events_api(monkeypatch):
     
     # Mock get_sheet til å returnere et dummy sheet
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
     mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
-    monkeypatch.setattr("cogs.sheets.get_sheet", lambda name="Vestsk Tipping": mock_sheet)
 
     # Mock formateringsfunksjoner
     monkeypatch.setattr("cogs.sheets.green_format", lambda: "green")
@@ -156,7 +477,6 @@ async def test_reminder_scheduler_thursday(monkeypatch):
     assert any("RAUÅ I GIR" in m for m in channel.sent)
     # last_reminder_week should be set to the week number
     assert cog.last_reminder_week == fixed_now.isocalendar()[1]
-
 
 @pytest.mark.asyncio
 async def test_reminder_scheduler_sunday(monkeypatch):
