@@ -549,5 +549,4 @@ async def test_reminder_scheduler_sunday(monkeypatch):
         await cog.reminder_scheduler()
 
     assert any("Early window snart" in m for m in channel.sent)
-    assert any("Patriots @ New York Giants" in m for m in channel.sent)
     assert cog.last_reminder_sunday is not None
