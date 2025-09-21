@@ -1,3 +1,13 @@
+"""
+Hovedmodul for Vestsk Tipping-funksjonalitet.
+
+Denne modulen håndterer all funksjonalitet relatert til Vestsk Tipping, inkludert:
+- Registrering av bets
+- Eksport av bets til Google Sheets
+- Resultatoppdatering og poengberegning
+- Automatiske påminnelser for tipping på torsdager og søndager
+"""
+
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
 import aiohttp
@@ -17,33 +27,80 @@ from core.errors import (
     ResultaterError,
 )
 
-# Konstanter for kanal-IDer
-TIPPE_CHANNEL_ID = 752538512250765314
-INFO_CHANNEL_ID = 795485646545748058
+# Discord kanal-IDer
+TIPPE_CHANNEL_ID = 752538512250765314  # Kanal for tipping
+INFO_CHANNEL_ID = 795485646545748058   # Kanal for informasjon og resultater
 
-# Sett opp logging
+# Konfigurer logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === Hjelpefunksjon for å parse ESPN-datoer ===
 def parse_espn_date(datestr: str) -> datetime:
-    # Bytt Z (UTC) til +00:00 så fromisoformat kan tolke det
+    """Konverterer ESPN API datoformat til datetime.
+    
+    Args:
+        datestr (str): Datostrengen fra ESPN API (ISO format med 'Z')
+    
+    Returns:
+        datetime: Konvertert datetime-objekt i UTC
+    
+    Example:
+        >>> parse_espn_date("2025-09-21T18:00Z")
+        datetime(2025, 9, 21, 18, 0, tzinfo=UTC)
+    """
     return datetime.fromisoformat(datestr.replace("Z", "+00:00"))
 
-# === Ekstern dekorator for admin-only kommandoer ===
 def admin_only():
+    """Dekorator som sjekker om brukeren har admin-tilgang.
+    
+    Henter admin-IDer fra miljøvariabelen ADMIN_IDS og sjekker om
+    brukerens Discord ID er i denne listen.
+    
+    Returns:
+        function: En check-funksjon som returnerer True for admin-brukere
+    
+    Raises:
+        CheckFailure: Hvis brukeren ikke er admin
+    """
     ADMIN_IDS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
     return commands.check(lambda ctx: str(ctx.author.id) in ADMIN_IDS)
 
 class VestskTipping(commands.Cog):
-    """Kommandoer for Vestsk Tipping"""
+    """Cog for håndtering av Vestsk Tipping.
+    
+    Denne cog-en inneholder all logikk for tipping på NFL-kamper,
+    inkludert registrering av bets, eksport til Google Sheets,
+    resultatoppdatering og automatiske påminnelser.
+    
+    Attributes:
+        bot (commands.Bot): Discord bot-instansen
+        norsk_tz (tzinfo): Tidssone for Norge (Europe/Oslo)
+        last_reminder_week (Optional[int]): Siste uke det ble sendt påminnelse
+        last_reminder_sunday (Optional[datetime]): Siste søndag det ble sendt påminnelse
+        reminder_task (asyncio.Task): Async task for påminnelser
+    """
 
     @staticmethod
     def is_valid_game_message(msg_content: str) -> bool:
-        """
-        Returnerer True hvis meldingen matcher kampformatet
-        'lag @ lag' eller 'lag - lag: score-score'
-        og ikke inneholder Discord mentions.
+        """Validerer om en melding er et gyldig kampformat.
+        
+        Godtar to formater:
+        1. 'lag @ lag' for tipping
+        2. 'lag - lag: score-score' for resultat
+        
+        Args:
+            msg_content (str): Meldingsinnholdet som skal valideres
+        
+        Returns:
+            bool: True hvis meldingen er gyldig kampformat
+        
+        Example:
+            >>> is_valid_game_message("Patriots @ Bills")
+            True
+            >>> is_valid_game_message("Patriots - Bills: 24-17")
+            True
+            >>> is_valid_game_message("@everyone Patriots vs Bills")
+            False
         """
         clean_text = re.sub(r'<:.+?:\d+>', '', msg_content).strip()
         if re.search(r'<@|@everyone|@here', clean_text):
@@ -52,6 +109,11 @@ class VestskTipping(commands.Cog):
                    re.match(r'^[A-Za-z0-9 .]+ - [A-Za-z0-9 .]+: \d+-\d+$', clean_text))
 
     def __init__(self, bot):
+        """Initialiserer VestskTipping cog.
+        
+        Args:
+            bot (commands.Bot): Discord bot-instansen
+        """
         self.bot = bot
         self.norsk_tz = pytz.timezone("Europe/Oslo")
         self.last_reminder_week = None
@@ -181,8 +243,7 @@ class VestskTipping(commands.Cog):
                                 or self.last_reminder_sunday != first_sunday_game.date()
                             ):
                                 await channel.send(
-                                    f"@everyone Early window snart, husk <#{INFO_CHANNEL_ID}>: "
-                                    f"{self._format_event(sunday_events[0])}"
+                                    f"@everyone Early window snart, husk <#{INFO_CHANNEL_ID}>"
                                 )
                                 self.last_reminder_sunday = first_sunday_game.date()
                                 logger.info(
@@ -216,12 +277,10 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(300)  # generell backoff før retry
 
     def _format_event(self, ev):
-        # Handle simple test event format
         if "home" in ev and "away" in ev:
             home_team = ev["home"]
             away_team = ev["away"]
         else:
-            # Handle ESPN API format
             comps = ev["competitions"][0]["competitors"]
             home = next(c for c in comps if c["homeAway"] == "home")
             away = next(c for c in comps if c["homeAway"] == "away")

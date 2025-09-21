@@ -12,11 +12,11 @@ __all__ = (
 )
 
 class BotError(Exception):
-    """Base class for alle errors relatert til botten."""
+    """Grunnklasse for alle errors relatert til botten."""
     pass
 
 class PPRFetchError(BotError):
-    """Raised når botten ikke klarer hente PPR."""
+    """Raised når botten ikke klarer å hente PPR."""
     def __init__(self, team_name: str, season: str, message: str = None):
         self.team_name = team_name
         self.season = season
@@ -24,7 +24,7 @@ class PPRFetchError(BotError):
         super().__init__(self.message)
 
 class PPRSnapshotError(BotError):
-    """Raised when saving a PPR snapshot fails."""
+    """Raised når botten ikke klarer å lagre et PPR snapshot."""
     def __init__(self, message: str = None):
         self.message = message or "Klarte ikke lagre snapshot av PPR"
         super().__init__(self.message)
@@ -37,7 +37,7 @@ class ResponseError(BotError):
         super().__init__(self.message)
 
 class SheetsError(BotError):
-    """Base class for errors knyttet til Google Sheets."""
+    """Grunnklasse for errors knyttet til Google Sheets."""
     pass
 
 class MissingCredentialsError(SheetsError):
@@ -62,11 +62,11 @@ class SheetNotFoundError(SheetsError):
         super().__init__(self.message)
 
 class VestskError(BotError):
-    """Base class for errors knyttet til Vestsk Tipping-cogen."""
+    """Grunnklasse for errors knyttet til Vestsk Tipping-cogen."""
     pass
 
 class APIFetchError(VestskError):
-    """Raised når ESPN API ikke kan hentes."""
+    """Raised når ESPNs API ikke kan hentes."""
     def __init__(self, url: str, original_exception: Exception = None):
         self.url = url
         self.original_exception = original_exception
@@ -95,7 +95,7 @@ class ResultaterError(VestskError):
         super().__init__(self.message)
 
 class ReminderError(VestskError):
-    """Raised når reminder-task feiler."""
+    """Raised når påminnelse feiler."""
     def __init__(self, message: str = None):
         self.message = message or "Feil i reminder-task"
         super().__init__(self.message)
