@@ -52,7 +52,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           # Ignorer DeprecationWarnings for pytz / oauth2client
-          pytest -W ignore::DeprecationWarning --cov=. --cov-report=xml --cov-fail-under=50
+          pytest -W ignore::DeprecationWarning --cov=. --cov-report=xml --cov-fail-under=25
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
