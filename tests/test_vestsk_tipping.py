@@ -8,7 +8,7 @@ import pytz
 
 @pytest.fixture(autouse=True)
 def mock_google_credentials(monkeypatch):
-    """Mock Google Sheets client so no credentials.json is needed."""
+    """Mock Google Sheets client så man ikke trenger credentials.json."""
     # Mock get_client slik at ingen creds trengs
     monkeypatch.setattr(sheets, "get_client", lambda: MagicMock())
     # Mock get_sheet slik at alle tester får et dummy sheet
@@ -77,32 +77,26 @@ async def test_resultater_handles_api_error(monkeypatch):
     ctx = MagicMock()
     ctx.send = AsyncMock()
     ctx.channel = MagicMock()
-    # Make channel.send awaitable
     ctx.channel.send = AsyncMock()
     cog.get_current_week = lambda self=None: 1
 
-    # Mock Google Sheets setup
     sheet = MagicMock()
     sheet.row_values = AsyncMock(return_value=["Header", "Player1", "Player2"])
     sheet.cell = AsyncMock(return_value=MagicMock(value="0"))
     monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
 
-    # Mock ResultaterError in case _resultater_impl tries to access events
     try:
         await cog._resultater_impl(ctx)
     except NoEventsFoundError:
         pass
 
-    # Check that ctx.send was called
     assert ctx.send.await_count > 0
 
 def test_is_valid_game_message_edge_cases():
     cog = VestskTipping.__new__(VestskTipping)
-    # Adjusted to match likely implementation: only valid if contains dash and score
     assert not cog.is_valid_game_message("")
     assert not cog.is_valid_game_message("random text")
     assert not cog.is_valid_game_message("TeamA vs TeamB")
-    # Accepts dash and score
     assert cog.is_valid_game_message("TeamA - TeamB: 24-17") is True
 
 @pytest.mark.asyncio
@@ -432,7 +426,6 @@ async def test_export_impl_simple(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_reminder_scheduler_thursday(monkeypatch):
-    # Arrange bot, channel and message capture
     class DummyChannel:
         def __init__(self):
             self.sent = []
@@ -445,14 +438,12 @@ async def test_reminder_scheduler_thursday(monkeypatch):
     bot.wait_until_ready = AsyncMock()
     bot.get_channel.return_value = channel
 
-    # Build cog sans __init__ and set timezone
     cog = VestskTipping.__new__(VestskTipping)
     cog.bot = bot
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
     cog.last_reminder_week = None
     cog.last_reminder_sunday = None
 
-    # Patch asyncio.sleep to be instant and stop after two sleeps
     sleep_calls = {"n": 0}
     async def fast_sleep(_):
         sleep_calls["n"] += 1
@@ -460,8 +451,8 @@ async def test_reminder_scheduler_thursday(monkeypatch):
             raise SystemExit()
     monkeypatch.setattr("cogs.vestsk_tipping.asyncio.sleep", fast_sleep)
 
-    # Fix current time to Thursday 17:50 local time
-    fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 5, 17, 50))  # Thursday
+    # Sett nåværende tid til torsdag 17:50 lokal tid
+    fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 5, 17, 50))  # Torsdag
     from cogs import vestsk_tipping as vt_mod
     class FixedDateTime(datetime):
         @classmethod
@@ -469,18 +460,14 @@ async def test_reminder_scheduler_thursday(monkeypatch):
             return fixed_now
     monkeypatch.setattr(vt_mod, "datetime", FixedDateTime)
 
-    # Act & Assert
     with pytest.raises(SystemExit):
         await cog.reminder_scheduler()
 
-    # Should have sent the Thursday reminder once
     assert any("RAUÅ I GIR" in m for m in channel.sent)
-    # last_reminder_week should be set to the week number
     assert cog.last_reminder_week == fixed_now.isocalendar()[1]
 
 @pytest.mark.asyncio
 async def test_reminder_scheduler_sunday(monkeypatch):
-    # Arrange bot and channel
     class DummyChannel:
         def __init__(self):
             self.sent = []
@@ -499,7 +486,6 @@ async def test_reminder_scheduler_sunday(monkeypatch):
     cog.last_reminder_week = None
     cog.last_reminder_sunday = None
 
-    # Patch time and sleep
     sleep_calls = {"n": 0}
     async def fast_sleep(_):
         sleep_calls["n"] += 1
@@ -507,7 +493,7 @@ async def test_reminder_scheduler_sunday(monkeypatch):
             raise SystemExit()
     monkeypatch.setattr("cogs.vestsk_tipping.asyncio.sleep", fast_sleep)
 
-    fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 8, 17, 55))  # Sunday before 18:00 reminder
+    fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 8, 17, 55))
     from cogs import vestsk_tipping as vt_mod
     class FixedDateTime(datetime):
         @classmethod
@@ -515,11 +501,9 @@ async def test_reminder_scheduler_sunday(monkeypatch):
             return fixed_now
         @classmethod
         def fromisoformat(cls, s):
-            # delegate to real datetime to parse
             return datetime.fromisoformat(s)
     monkeypatch.setattr(vt_mod, "datetime", FixedDateTime)
 
-    # Patch aiohttp.ClientSession to return a Sunday event at 17:00 UTC (19:00 local)
     class DummyAiohttpResponse:
         async def json(self):
             return {
@@ -561,12 +545,9 @@ async def test_reminder_scheduler_sunday(monkeypatch):
         lambda *a, **kw: DummyAiohttpSession(),
     )
 
-    # Act & Assert
     with pytest.raises(SystemExit):
         await cog.reminder_scheduler()
 
-    # Should have sent the Sunday early window reminder
     assert any("Early window snart" in m for m in channel.sent)
-    # Ensure the formatted matchup appears in the message
     assert any("Patriots @ New York Giants" in m for m in channel.sent)
     assert cog.last_reminder_sunday is not None

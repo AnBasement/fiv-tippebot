@@ -1,9 +1,9 @@
 """
-Modul for håndtering av Google Sheets-integrasjon.
+Modul for håndtering av integrasjon med Google Sheets.
 
-Dette modulet gir et grensesnitt for å interagere med Google Sheets API,
+Denne modulen gir et grensesnitt for å interagere med Google Sheets' API,
 inkludert autentisering, tilkobling, og celleformatering. Det håndterer
-feilsituasjoner på en robust måte og gir informative feilmeldinger.
+feilsituasjoner og gir feilmeldinger.
 """
 
 from typing import List, Dict, Any
@@ -57,7 +57,7 @@ def get_client() -> Client:
         raise ClientAuthorizationError(f"Kunne ikke autorisere mot Google: {str(e)}")
 
 def get_sheet(sheet_name: str, worksheet_index: int = 0) -> Worksheet:
-    """Åpner et spesifikt Google Sheet og arbeidsark.
+    """Åpner et spesifikt Google Sheet-dokument og arbeidsark.
     
     Args:
         sheet_name (str): Navnet på Google Sheet-dokumentet.

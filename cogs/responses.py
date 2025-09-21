@@ -8,8 +8,7 @@ class Responses(Cog):
     """Cog for kommandoer hvor botten svarer med forhåndsdefinerte meldinger.
     
     Denne cog-en inneholder enkle kommandoer som returnerer faste
-    meldinger, ofte med emojis og formatering. Hver kommando er
-    knyttet til spesifikke hendelser eller situasjoner i NFL.
+    meldinger. Kommandoene er for det meste knyttet til inside-jokes.
     
     Attributes:
         bot (Bot): Discord bot-instansen
@@ -25,7 +24,8 @@ class Responses(Cog):
 
     @commands.command(name="kaimi")
     async def kaimi(self, ctx: Context) -> None:
-        """Feirer når Ka'imi Fairbairn scorer poeng.
+        """Poster det fulle navnet til Ka'imi Fairbairn.
+        Vanligvis brukt når Ka'imi scorer.
         
         Args:
             ctx (Context): Discord context-objektet
@@ -59,7 +59,7 @@ class Responses(Cog):
 
     @commands.command(name="doink")
     async def doink(self, ctx):
-        """Reagerer når en kicker treffer målstangen.
+        """Brukes når en kicker bommer/treffer målstengene.
         
         Args:
             ctx (commands.Context): Discord context-objektet
@@ -74,7 +74,7 @@ class Responses(Cog):
 
     @commands.command(name="incel")
     async def incel(self, ctx):
-        """Kommenterer på Harrison Butker.
+        """Selvforklarende.
         
         Args:
             ctx (commands.Context): Discord context-objektet

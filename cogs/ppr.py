@@ -4,6 +4,7 @@ Modul som håndterer PPR (points per reception) statistikk og historikk.
 Denne modulen gir funksjonalitet for å hente PPR-verdier fra spillernes
 individuelle ark, lagre snapshots av PPR-verdier over tid, og vise
 oppdaterte rangeringer i Discord.
+
 """
 
 import logging
@@ -20,7 +21,7 @@ class PPR(commands.Cog):
     """Cog for håndtering av PPR-statistikk og -kommandoer.
     
     Denne cog-en håndterer innhenting av PPR-verdier fra Google Sheets,
-    lagring av historiske data, og visning av rangeringer i Discord.
+    lagring av historiske data, og posting av rangeringer i Discord.
     """
 
     def __init__(self, bot):
@@ -41,14 +42,14 @@ class PPR(commands.Cog):
         """Henter PPR-data for alle spillere for gitt sesong.
         
         Går gjennom hvert spillerark og henter ut PPR-verdier for
-        spesifisert sesong. Verdiene må være i kolonne B, med sesongen
-        spesifisert i kolonne A.
+        spesifisert sesong. Sesong-verdien finnes i kolonne A
+        og verdiene må være i kolonne B.
         
         Args:
             season (str, optional): Sesongen å hente PPR for. Standard er "2025".
         
         Returns:
-            list[dict]: Liste med dictionaries som inneholder team og ppr for hver spiller.
+            list[dict]: Liste med dictionaries som inneholder lagnavn og PPR for hver spiller.
                 Format: [{"team": str, "ppr": float}, ...]
         
         Raises:
@@ -107,7 +108,7 @@ class PPR(commands.Cog):
     def _save_snapshot(self, players):
         """Lagrer et snapshot av dagens PPR-verdier.
         
-        Oppretter eller oppdaterer arket 'PPR-historikk' med dagens
+        Oppdaterer arket 'PPR-historikk' med dagens
         PPR-verdier for alle spillere. Inkluderer rangering basert
         på PPR-verdi.
         
@@ -161,7 +162,7 @@ class PPR(commands.Cog):
     @commands.command(name="ppr")
     @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
     async def ppr(self, ctx):
-        """Viser oppdatert PPR-rangering i Discord.
+        """Poster oppdatert PPR-rangering i Discord.
         
         Henter dagens PPR-verdier, lagrer et snapshot, og viser
         rangeringen i Discord med endringer siden forrige snapshot.

@@ -4,8 +4,8 @@ from discord.ext.commands import Bot, Context
 class Utility(commands.Cog):
     """Cog for enkle hjelpekommandoer og verktøy.
     
-    Denne cog-en inneholder grunnleggende kommandoer for å teste
-    at botten fungerer og er responsiv.
+    Cogen inneholder per nå kun en ping-kommando for å sjekke
+    at botten er aktiv og responderer.
     
     Attributes:
         bot (Bot): Discord bot-instansen
@@ -31,8 +31,8 @@ class Utility(commands.Cog):
     async def ping(self, ctx: Context) -> None:
         """En enkel kommando for å sjekke om botten er aktiv.
         
-        Denne kommandoen svarer med 'Pong! ✅' for å indikere
-        at botten er oppe og går.
+        Botten svarer med 'Pong! ✅' for å indikere
+        at botten er aktiv.
 
         Args:
             ctx (Context): Discord context-objektet

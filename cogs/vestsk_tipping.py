@@ -1,11 +1,11 @@
 """
 Hovedmodul for Vestsk Tipping-funksjonalitet.
 
-Denne modulen håndterer all funksjonalitet relatert til NFL-tipping, inkludert:
-- Registrering av tips
-- Eksport av tips til Google Sheets
+Denne modulen håndterer all funksjonalitet relatert til Vestsk Tipping, inkludert:
+- Registrering av bets
+- Eksport av bets til Google Sheets
 - Resultatoppdatering og poengberegning
-- Automatiske påminnelser for tipping
+- Automatiske påminnelser for tipping på torsdager og søndager
 """
 
 from discord.ext import commands
@@ -66,16 +66,16 @@ def admin_only():
     return commands.check(lambda ctx: str(ctx.author.id) in ADMIN_IDS)
 
 class VestskTipping(commands.Cog):
-    """Cog for håndtering av Vestsk Tipping-funksjonalitet.
+    """Cog for håndtering av Vestsk Tipping.
     
-    Denne cog-en inneholder all logikk for tipping av NFL-kamper,
-    inkludert registrering av tips, eksport til Google Sheets,
+    Denne cog-en inneholder all logikk for tipping på NFL-kamper,
+    inkludert registrering av bets, eksport til Google Sheets,
     resultatoppdatering og automatiske påminnelser.
     
     Attributes:
         bot (commands.Bot): Discord bot-instansen
         norsk_tz (tzinfo): Tidssone for Norge (Europe/Oslo)
-        last_reminder_week (Optional[int]): Siste uke det ble sendt påminnelse for
+        last_reminder_week (Optional[int]): Siste uke det ble sendt påminnelse
         last_reminder_sunday (Optional[datetime]): Siste søndag det ble sendt påminnelse
         reminder_task (asyncio.Task): Async task for påminnelser
     """
@@ -243,8 +243,7 @@ class VestskTipping(commands.Cog):
                                 or self.last_reminder_sunday != first_sunday_game.date()
                             ):
                                 await channel.send(
-                                    f"@everyone Early window snart, husk <#{INFO_CHANNEL_ID}>: "
-                                    f"{self._format_event(sunday_events[0])}"
+                                    f"@everyone Early window snart, husk <#{INFO_CHANNEL_ID}>"
                                 )
                                 self.last_reminder_sunday = first_sunday_game.date()
                                 logger.info(
@@ -278,12 +277,10 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(300)  # generell backoff før retry
 
     def _format_event(self, ev):
-        # Handle simple test event format
         if "home" in ev and "away" in ev:
             home_team = ev["home"]
             away_team = ev["away"]
         else:
-            # Handle ESPN API format
             comps = ev["competitions"][0]["competitors"]
             home = next(c for c in comps if c["homeAway"] == "home")
             away = next(c for c in comps if c["homeAway"] == "away")
