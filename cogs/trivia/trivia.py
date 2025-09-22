@@ -4,6 +4,7 @@ import time
 from discord.ext import commands
 from cogs.trivia.schema import load_questions, Question
 from pathlib import Path
+from data.brukere import DISCORD_TO_NAME, TEAM_NAMES, TEAM_ABBREVIATIONS
 
 # Enkel poenglogg (kan senere byttes ut med Sheets)
 scores = {}  # key: user_id, value: {"username": str, "points": int}
@@ -68,20 +69,27 @@ class Trivia(commands.Cog):
         except asyncio.TimeoutError:
             await ctx.send(f"Too slow! Riktig svar: **{answer}**")
 
-    @commands.command()
-    async def scoreboard(self, ctx):
+    @commands.command(name="toppliste")
+    async def toppliste(self, ctx):
         """
-        Viser topplisten.
+        Viser topplisten med lag-/spillernavn basert på Discord-ID.
         """
         if not scores:
             await ctx.send("Ingen har poeng!")
             return
 
         sorted_scores = sorted(scores.items(), key=lambda x: x[1]["points"], reverse=True)
-        lines = [f"{data['username']}: {data['points']} poeng" for _, data in sorted_scores[:10]]
-        leaderboard = "\n".join(lines)
-        await ctx.send(f"Topplisten:\n{leaderboard}")
 
+        lines = []
+        for user_id, data in sorted_scores[:10]:
+            navn = DISCORD_TO_NAME.get(user_id, data["username"])  # hent spiller
+            team_name = TEAM_NAMES.get(navn, navn)                # hent lag
+            team_abbr = TEAM_ABBREVIATIONS.get(team_name, "")     # hent forkortelse
+
+            if team_abbr:
+                lines.append(f"{navn} ({team_abbr}): {data['points']} poeng")
+            else:
+                lines.append(f"{navn}: {data['points']} poeng")
 
 # --- Setup ---
 async def setup(bot):
