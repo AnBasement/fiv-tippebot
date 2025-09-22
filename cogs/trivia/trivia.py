@@ -5,15 +5,7 @@ from discord.ext import commands
 from cogs.trivia.schema import load_questions, Question
 from pathlib import Path
 from data.brukere import DISCORD_TO_NAME, TEAM_NAMES, TEAM_ABBREVIATIONS
-
-# Enkel poenglogg (kan senere byttes ut med Sheets)
-scores = {}  # key: user_id, value: {"username": str, "points": int}
-
-def update_score(user_id: int, username: str, points: int):
-    if user_id in scores:
-        scores[user_id]["points"] += points
-    else:
-        scores[user_id] = {"username": username, "points": points}
+from cogs.trivia.poeng import update_score, get_scores
 
 def get_random_question(category: str = "nfl") -> Question:
     """
@@ -60,7 +52,8 @@ class Trivia(commands.Cog):
 
             # Gi poeng basert på tid
             points = 3 if elapsed <= 5 else 1
-            update_score(msg.author.id, msg.author.name, points)
+            navn = DISCORD_TO_NAME.get(msg.author.id, msg.author.name)
+            update_score(navn, points)
 
             await ctx.send(
                 f"{msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! +{points} poeng"
@@ -71,34 +64,24 @@ class Trivia(commands.Cog):
 
     @commands.command(name="toppliste")
     async def toppliste(self, ctx):
-        """
-        Viser topplisten med lag-/spillernavn basert på Discord-ID.
-        """
-        print("Toppliste-kommandoen ble kalt!")  # DEBUG
-
+        scores = get_scores()
         if not scores:
             await ctx.send("Ingen har poeng!")
-            print("Ingen poeng registrert")  # DEBUG
             return
 
-        sorted_scores = sorted(scores.items(), key=lambda x: x[1]["points"], reverse=True)
-        print(f"Sorter poeng: {sorted_scores}")  # DEBUG
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
         lines = []
-        for user_id, data in sorted_scores[:10]:
-            navn = DISCORD_TO_NAME.get(user_id, data["username"])  # hent spiller
-            team_name = TEAM_NAMES.get(navn, navn)                # hent lag
-            team_abbr = TEAM_ABBREVIATIONS.get(team_name, "")     # hent forkortelse
-
+        for navn, poeng in sorted_scores[:10]:
+            team_name = TEAM_NAMES.get(navn, navn)
+            team_abbr = TEAM_ABBREVIATIONS.get(team_name, "")
             if team_abbr:
-                lines.append(f"{navn} ({team_abbr}): {data['points']} poeng")
+                lines.append(f"{navn} ({team_abbr}): {poeng} poeng")
             else:
-                lines.append(f"{navn}: {data['points']} poeng")
+                lines.append(f"{navn}: {poeng} poeng")
 
-        toppliste = "\n".join(lines)
-        print(f"Toppliste:\n{toppliste}")  # DEBUG
-
-        await ctx.send(f"Topplisten:\n{toppliste}")
+        leaderboard = "\n".join(lines)
+        await ctx.send(f"Topplisten:\n{leaderboard}")
 
 # --- Setup ---
 async def setup(bot):
