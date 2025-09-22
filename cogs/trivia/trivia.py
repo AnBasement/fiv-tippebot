@@ -74,11 +74,15 @@ class Trivia(commands.Cog):
         """
         Viser topplisten med lag-/spillernavn basert på Discord-ID.
         """
+        print("Toppliste-kommandoen ble kalt!")  # DEBUG
+
         if not scores:
             await ctx.send("Ingen har poeng!")
+            print("Ingen poeng registrert")  # DEBUG
             return
 
         sorted_scores = sorted(scores.items(), key=lambda x: x[1]["points"], reverse=True)
+        print(f"Sorter poeng: {sorted_scores}")  # DEBUG
 
         lines = []
         for user_id, data in sorted_scores[:10]:
@@ -90,6 +94,11 @@ class Trivia(commands.Cog):
                 lines.append(f"{navn} ({team_abbr}): {data['points']} poeng")
             else:
                 lines.append(f"{navn}: {data['points']} poeng")
+
+        toppliste = "\n".join(lines)
+        print(f"Toppliste:\n{toppliste}")  # DEBUG
+
+        await ctx.send(f"Topplisten:\n{toppliste}")
 
 # --- Setup ---
 async def setup(bot):
