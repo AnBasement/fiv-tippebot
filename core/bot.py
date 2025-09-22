@@ -32,6 +32,7 @@ COGS = [
     "cogs.vestsk_tipping",   # kamper, eksporter, resultater
     "cogs.responses",        # forskjellige humorkommandoer
     "cogs.ppr",              # oppdaterer og poster PPRs
+    "cogs.trivia.trivia",    # kjører trivia/quiz
 ]
 
 # === Events ===
