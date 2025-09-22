@@ -1,25 +1,83 @@
 import random
-from pathlib import Path
+import asyncio
+import time
+from discord.ext import commands
 from cogs.trivia.schema import load_questions, Question
+from pathlib import Path
 
-# Map kategori til YAML-fil
-CATEGORY_FILES = {
-    "nfl": "cogs/trivia/data/lists/nfl.yaml",
-}
+# Enkel poenglogg (kan senere byttes ut med Sheets)
+scores = {}  # key: user_id, value: {"username": str, "points": int}
+
+def update_score(user_id: int, username: str, points: int):
+    if user_id in scores:
+        scores[user_id]["points"] += points
+    else:
+        scores[user_id] = {"username": username, "points": points}
 
 def get_random_question(category: str = "nfl") -> Question:
     """
     Henter et tilfeldig spørsmål fra valgt kategori.
-    Hvis kategorien ikke finnes, fallback til 'nfl'.
     """
-    file_path = CATEGORY_FILES.get(category.lower())
-    if not file_path or not Path(file_path).exists():
-        # Fallback til NFL hvis fil mangler
-        file_path = CATEGORY_FILES["nfl"]
+    file_path = Path(f"cogs/trivia/data/lists/{category.lower()}.yaml")
+    if not file_path.exists():
+        # fallback til nfl hvis fil mangler
+        file_path = Path("cogs/trivia/data/lists/nfl.yaml")
         category = "nfl"
-
-    questions = load_questions(file_path, kategori=category)
+    questions = load_questions(file_path, kategori=category.upper())
     if not questions:
         raise ValueError(f"Ingen spørsmål funnet i kategori {category}")
-
     return random.choice(questions)
+
+class Trivia(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def trivia(self, ctx, category: str = "nfl"):
+        """
+        Starter en trivia-runde i den gitte kategorien.
+        """
+        question = get_random_question(category)
+        question_text = question.spørsmål_tekst
+        answer = question.svar
+
+        await ctx.send(f" Spørsmål ({category.upper()}): {question_text}")
+
+        start_time = time.monotonic()
+
+        def check(msg):
+            return (
+                msg.channel == ctx.channel
+                and not msg.author.bot
+                and msg.content.lower() == answer.lower()
+            )
+
+        try:
+            # Vent på første riktige svar i maks 10 sekunder
+            msg = await self.bot.wait_for("message", timeout=10.0, check=check)
+            elapsed = time.monotonic() - start_time
+
+            # Gi poeng basert på tid
+            points = 3 if elapsed <= 5 else 1
+            update_score(msg.author.id, msg.author.name, points)
+
+            await ctx.send(
+                f"🎉 {msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! +{points} poeng"
+            )
+
+        except asyncio.TimeoutError:
+            await ctx.send(f"Too slow! Riktig svar: **{answer}**")
+
+    @commands.command()
+    async def scoreboard(self, ctx):
+        """
+        Viser topplisten.
+        """
+        if not scores:
+            await ctx.send("Ingen har poeng!")
+            return
+
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1]["points"], reverse=True)
+        lines = [f"{data['username']}: {data['points']} poeng" for _, data in sorted_scores[:10]]
+        leaderboard = "\n".join(lines)
+        await ctx.send(f"Topplisten:\n{leaderboard}")
