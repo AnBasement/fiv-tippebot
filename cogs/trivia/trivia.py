@@ -62,7 +62,7 @@ class Trivia(commands.Cog):
             update_score(msg.author.id, msg.author.name, points)
 
             await ctx.send(
-                f"🎉 {msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! +{points} poeng"
+                f"{msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! +{points} poeng"
             )
 
         except asyncio.TimeoutError:
