@@ -53,11 +53,10 @@ class Trivia(commands.Cog):
             # Gi poeng basert på tid
             points = 3 if elapsed <= 5 else 1
             navn = DISCORD_TO_NAME.get(msg.author.id, msg.author.name)
-            update_score(navn, points)
-
             await ctx.send(
                 f"{msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! +{points} poeng"
             )
+            update_score(navn, points)
 
         except asyncio.TimeoutError:
             await ctx.send(f"Too slow! Riktig svar: **{answer}**")
