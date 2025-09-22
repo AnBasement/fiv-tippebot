@@ -80,7 +80,7 @@ class Trivia(commands.Cog):
                 lines.append(f"{navn}: {poeng} poeng")
 
         leaderboard = "\n".join(lines)
-        await ctx.send(f"Topplisten:\n{leaderboard}")
+        await ctx.send(f"Triviasjefene:\n{leaderboard}")
 
 # --- Setup ---
 async def setup(bot):

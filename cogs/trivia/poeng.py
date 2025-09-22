@@ -20,8 +20,6 @@ def get_scores() -> Dict[str, int]:
                 poeng = 0
             scores[navn] = poeng
     return scores
-
-
 def update_score(navn: str, points: int) -> None:
     """
     Oppdaterer poengsummen for en spiller i Google Sheets.
@@ -45,7 +43,6 @@ def update_score(navn: str, points: int) -> None:
     # Hvis navnet ikke finnes: legg til ny rad nederst
     new_row = ["", navn, points]
     sheet.append_row(new_row)
-
 
 def reset_scores() -> None:
     """
