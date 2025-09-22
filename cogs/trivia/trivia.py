@@ -81,3 +81,9 @@ class Trivia(commands.Cog):
         lines = [f"{data['username']}: {data['points']} poeng" for _, data in sorted_scores[:10]]
         leaderboard = "\n".join(lines)
         await ctx.send(f"Topplisten:\n{leaderboard}")
+
+
+# --- Setup ---
+async def setup(bot):
+    """Legger til Trivia-cog i Discord-botten."""
+    await bot.add_cog(Trivia(bot))
