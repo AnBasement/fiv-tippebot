@@ -117,6 +117,10 @@ Kjør testsuiten:
 python -m pytest
 ```
 
+## Anerkjennelser
+
+Dette prosjektet har hentet inspirasjon fra [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), med ideer for cogs og strukturering av boten.
+
 ## Lisens
 
 Dette prosjektet er lisensiert under GNU General Public License v3.0 - se [LICENSE](LICENSE) filen for detaljer.
