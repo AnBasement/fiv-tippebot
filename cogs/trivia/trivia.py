@@ -6,6 +6,7 @@ from cogs.trivia.schema import load_questions, Question
 from pathlib import Path
 from data.brukere import DISCORD_TO_NAME, TEAM_NAMES, TEAM_ABBREVIATIONS
 from cogs.trivia.poeng import update_score, get_scores
+from core.decorators import admin_only
 
 def get_random_question(category: str = "nfl") -> Question:
     """
@@ -24,6 +25,7 @@ def get_random_question(category: str = "nfl") -> Question:
 class Trivia(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.active_sessions = {}
 
     @commands.command()
     async def trivia(self, ctx, category: str = "nfl"):
@@ -67,6 +69,7 @@ class Trivia(commands.Cog):
             await ctx.send(f"Too slow! Riktig svar: **{answer}**")
 
     @commands.command(name="triviasesh")
+    @admin_only()
     async def triviasesh(self, ctx, category: str = "nfl"):
         """
         Starter en trivia-runde med 10 spørsmål i valgt kategori.
