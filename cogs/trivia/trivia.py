@@ -46,12 +46,17 @@ class Trivia(commands.Cog):
             )
 
         try:
-            # Vent på første riktige svar i maks 10 sekunder
-            msg = await self.bot.wait_for("message", timeout=10.0, check=check)
+            # Vent på første riktige svar i maks 60 sekunder
+            msg = await self.bot.wait_for("message", timeout=60.0, check=check)
             elapsed = time.monotonic() - start_time
 
             # Gi poeng basert på tid
-            points = 3 if elapsed <= 5 else 1
+            if elapsed <= 5:
+                points = 5
+            elif elapsed <= 30:
+                points = 3
+            else:
+                points = 1
             navn = DISCORD_TO_NAME.get(msg.author.id, msg.author.name)
             await ctx.send(
                 f"{msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! +{points} poeng"
