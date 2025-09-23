@@ -54,6 +54,8 @@ Det er i teorien mulig å hel-automatisere oppdateringen av ligadokumentet med E
 
 ## Installasjon
 
+Vær klar over at denne botten er laget spesifikt for en privat server. Det vil derfor trolig være nødvendig å foreta en del endringer for å tilpasse til egen server. Ta kontakt om du ønsker å bruke botten og trenger hjelp.
+
 1. Klon repositoriet:
 
     ```bash
@@ -61,13 +63,13 @@ Det er i teorien mulig å hel-automatisere oppdateringen av ligadokumentet med E
     cd fiv-tippebot
     ```
 
-1. Installer avhengigheter:
+2. Installer avhengigheter:
 
     ```bash
     pip install -r requirements.txt
     ```
 
-1. Sett opp miljøvariabler i `.env`:
+3. Sett opp miljøvariabler i `.env`:
 
     ```env
     DISCORD_TOKEN=din_discord_bot_token
@@ -76,11 +78,11 @@ Det er i teorien mulig å hel-automatisere oppdateringen av ligadokumentet med E
     ADMIN_CHANNEL_ID=discord_kanal_id
     ```
 
-1. Start botten:
+4. Start botten:
 
-```bash
-python -m core.bot
-```
+    ```bash
+    python -m core.bot
+    ```
 
 ## Prosjektstruktur
 
