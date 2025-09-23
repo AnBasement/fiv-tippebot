@@ -80,13 +80,29 @@ class Trivia(commands.Cog):
 
     async def run_trivia_session(self, ctx, category: str):
         try:
+            # Bygg filsti til YAML for valgt kategori
+            file_path = f"cogs/trivia/data/lists/{category.lower()}.yaml"
+            questions = load_questions(file_path, kategori=category.upper())
+
+            if not questions:
+                await ctx.send(f"Ingen spørsmål funnet i kategorien {category.upper()}.")
+                return
+
+            # Velg 10 unike spørsmål (eller færre hvis listen er kort)
+            if len(questions) > 10:
+                questions = random.sample(questions, 10)
+            # Hvis 10 eller færre, bruker hele listen
+
             session_scores = {}
-            for i in range(1, 11):
-                question = get_random_question(category)
+
+            for i, question in enumerate(questions, start=1):
                 question_text = question.spørsmål_tekst
                 answer = question.svar
 
-                await ctx.send(f"Spørsmål {i}/10 ({category.upper()}): {question_text}")
+                await ctx.send(
+                    f"Spørsmål {i}/{len(questions)} "
+                    f"({category.upper()}): {question_text}"
+                )
 
                 start_time = time.monotonic()
 
@@ -115,29 +131,29 @@ class Trivia(commands.Cog):
                         f"+{points} poeng"
                     )
 
-                    # Oppdater både midlertidig session-score og den globale
                     session_scores[navn] = session_scores.get(navn, 0) + points
                     update_score(navn, points)
 
                 except asyncio.TimeoutError:
                     await ctx.send(f"Too slow! Riktig svar: **{answer}**")
 
-                # liten pause mellom spørsmål
                 await asyncio.sleep(1)
 
-            # Etter alle spørsmålene: vis poengsummer for denne sesjonen
+            # Vis sesjonens leaderboard
             if session_scores:
                 leaderboard_lines = [
                     f"{navn}: {poeng} poeng"
                     for navn, poeng in sorted(
-                        session_scores.items(), key=lambda x: x[1], reverse=True
+                        session_scores.items(),
+                        key=lambda x: x[1],
+                        reverse=True
                     )
                 ]
-
                 leaderboard_text = "\n".join(leaderboard_lines)
                 await ctx.send(f"Triviasesh ferdig! Toppliste:\n{leaderboard_text}")
             else:
                 await ctx.send("Ingen fikk poeng denne runden.")
+
         except asyncio.CancelledError:
             await ctx.send("Trivia avbrutt.")
             raise
