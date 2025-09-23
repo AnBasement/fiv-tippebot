@@ -66,6 +66,73 @@ class Trivia(commands.Cog):
         except asyncio.TimeoutError:
             await ctx.send(f"Too slow! Riktig svar: **{answer}**")
 
+    @commands.command(name="triviasesh")
+    async def triviasesh(self, ctx, category: str = "nfl"):
+        """
+        Starter en trivia-runde med 10 spørsmål i valgt kategori.
+        """
+        await ctx.send(f"Starter trivia-sesjon med 10 spørsmål i kategorien {category.upper()}!")
+
+        session_scores = {}  # midlertidig poengoversikt for denne sesjonen
+
+        for i in range(1, 11):
+            question = get_random_question(category)
+            question_text = question.spørsmål_tekst
+            answer = question.svar
+
+            await ctx.send(f"Spørsmål {i}/10 ({category.upper()}): {question_text}")
+
+            start_time = time.monotonic()
+
+            def check(msg):
+                return (
+                    msg.channel == ctx.channel
+                    and not msg.author.bot
+                    and msg.content.lower() == answer.lower()
+                )
+
+            try:
+                msg = await self.bot.wait_for("message", timeout=60.0, check=check)
+                elapsed = time.monotonic() - start_time
+
+                # Poeng basert på tid
+                if elapsed <= 5:
+                    points = 5
+                elif elapsed <= 30:
+                    points = 3
+                else:
+                    points = 1
+
+                navn = DISCORD_TO_NAME.get(msg.author.id, msg.author.name)
+                await ctx.send(
+                    f"{msg.author.mention} svarte riktig etter {elapsed:.1f} sekunder! "
+                    f"+{points} poeng"
+                )
+
+                # Oppdater både midlertidig session-score og den globale
+                session_scores[navn] = session_scores.get(navn, 0) + points
+                update_score(navn, points)
+
+            except asyncio.TimeoutError:
+                await ctx.send(f"Too slow! Riktig svar: **{answer}**")
+
+            # liten pause mellom spørsmål
+            await asyncio.sleep(1)
+
+        # Etter alle spørsmålene: vis poengsummer for denne sesjonen
+        if session_scores:
+            leaderboard_lines = [
+                f"{navn}: {poeng} poeng"
+                for navn, poeng in sorted(
+                    session_scores.items(), key=lambda x: x[1], reverse=True
+                )
+            ]
+
+            leaderboard_text = "\n".join(leaderboard_lines)
+            await ctx.send(f"Trivia-sesjon ferdig! Sesjonens poeng:\n{leaderboard_text}")
+        else:
+            await ctx.send("Ingen poeng ble scoret denne sesjonen.")
+
     @commands.command(name="toppliste")
     async def toppliste(self, ctx):
         scores = get_scores()
