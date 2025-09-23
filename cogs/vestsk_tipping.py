@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import asyncio
-import os
 import logging
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
@@ -26,6 +25,7 @@ from core.errors import (
     ExportError,
     ResultaterError,
 )
+from core.decorators import admin_only
 
 # Discord kanal-IDer
 TIPPE_CHANNEL_ID = 752538512250765314  # Kanal for tipping
@@ -49,21 +49,6 @@ def parse_espn_date(datestr: str) -> datetime:
         datetime(2025, 9, 21, 18, 0, tzinfo=UTC)
     """
     return datetime.fromisoformat(datestr.replace("Z", "+00:00"))
-
-def admin_only():
-    """Dekorator som sjekker om brukeren har admin-tilgang.
-    
-    Henter admin-IDer fra miljøvariabelen ADMIN_IDS og sjekker om
-    brukerens Discord ID er i denne listen.
-    
-    Returns:
-        function: En check-funksjon som returnerer True for admin-brukere
-    
-    Raises:
-        CheckFailure: Hvis brukeren ikke er admin
-    """
-    ADMIN_IDS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
-    return commands.check(lambda ctx: str(ctx.author.id) in ADMIN_IDS)
 
 class VestskTipping(commands.Cog):
     """Cog for håndtering av Vestsk Tipping.
