@@ -26,10 +26,7 @@ from core.errors import (
     ExportError,
     ResultaterError,
 )
-
-# Discord kanal-IDer
-PREIK_KANAL = 752538512250765314  # Kanal for oppdatering om posting av kamper og påminnelser
-VESTSK_KANAL = 795485646545748058   # Kanal for informasjon og resultater
+from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)

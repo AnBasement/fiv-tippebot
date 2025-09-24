@@ -28,6 +28,10 @@ PPR er fantasyligaens "power ranking" som forsøker å sette et tall til hvor br
 
 Botten har også en rekke enkle responskommandoer som for det meste kommer fra interne vitser.
 
+### Annet
+
+Botten sender en påminnelse på tirsdager om å ikke glemme waivers før ny uke starter.
+
 ## Planlagte funksjoner
 
 ### Trivia
@@ -91,21 +95,22 @@ Vær klar over at denne botten er laget spesifikt for en privat server. Det vil 
 ## Prosjektstruktur
 
 ```text
-├── cogs/                        # Discord-bot moduler
-│   ├── ppr.py                   # Oppdaterer PPR-leaderboard
-│   ├── utility.py               # Små hjelpekommandoer
-│   ├── vestsk_tipping.py        # Hovedlogikk for tippespillet
-│   ├── sheets.py                # Google Sheets-integrasjon
-│   └── responses.py             # Diverse respons-kommandoer
-├── core/                        # Kjernefunksjonalitet
-│   ├── bot.py                   # Bot-initialisering
-│   ├── keep_alive.py            # Webserver for uptime
-│   └── utils/                   # Hjelpeverktøy
-│       ├── global_cooldown.py   # Cooldown for kommandospam
-├── data/                        # Statisk data og konfigurasjon
-│   ├── brukere.py               # Bruker- og lagdata
-│   └── teams.py                 # NFL-lagdata og emojis
-└── tests/                       # Testsuite
+├── cogs/                           # Discord-bot moduler
+│   ├── ppr.py                      # Oppdaterer PPR-leaderboard
+│   ├── utility.py                  # Små hjelpekommandoer
+│   ├── vestsk_tipping.py           # Hovedlogikk for tippespillet
+│   ├── sheets.py                   # Google Sheets-integrasjon
+│   └── responses.py                # Diverse respons-kommandoer
+├── core/                           # Kjernefunksjonalitet
+│   ├── bot.py                      # Bot-initialisering
+│   ├── keep_alive.py               # Webserver for uptime
+│   └── utils/                      # Hjelpeverktøy
+│       └── global_cooldown.py      # Cooldown for kommandospam
+├── data/                           # Statisk data og konfigurasjon
+│   ├── brukere.py                  # Bruker- og lagdata
+│   └── teams.py                    # NFL-lagdata og emojis
+└── tests/                          # Testsuite
+    ├── test_fantasy_reminders.py  
     ├── test_ppr.py    
     ├── test_responses.py
     ├── test_sheets.py
@@ -153,6 +158,7 @@ python -m pytest
 ## Anerkjennelser
 
 Dette prosjektet har hentet inspirasjon fra [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), med ideer for cogs og strukturering av boten.
+[Claude](https://claude.ai) har vært svært nyttig gjennom byggingen av botten, spesielt når det kommer til å lage testfiler.
 
 ## Lisens
 

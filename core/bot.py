@@ -7,11 +7,11 @@ from dotenv import load_dotenv
 from core.keep_alive import keep_alive
 from core.utils.global_cooldown import setup_global_cooldown
 from core.errors import BotError
+from data.channel_ids import ADMIN_CHANNEL_ID
 
 # === Last miljøvariabler ===
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID"))
 
 # === Discord intents ===
 intents = discord.Intents.default()
@@ -32,6 +32,7 @@ COGS = [
     "cogs.vestsk_tipping",   # kamper, eksporter, resultater
     "cogs.responses",        # forskjellige humorkommandoer
     "cogs.ppr",              # oppdaterer og poster PPRs
+    "cogs.fantasy_reminders" # generelle påminnelser for fantasyligaen
 ]
 
 # === Events ===
