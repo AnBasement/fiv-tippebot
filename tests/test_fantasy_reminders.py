@@ -9,19 +9,19 @@ from cogs.fantasy_reminders import FantasyReminders, setup
 
 @pytest.fixture
 def mock_bot():
-    """Create a mock Discord bot."""
+    """Mocker en Discord bot."""
     bot = Mock()
     bot.loop = Mock()
     bot.loop.create_task = Mock()
     bot.wait_until_ready = AsyncMock()
     bot.get_channel = Mock()
-    bot.add_cog = AsyncMock()  # Changed back to AsyncMock for setup function
+    bot.add_cog = AsyncMock()
     return bot
 
 
 @pytest.fixture
 def mock_channel():
-    """Create a mock Discord channel."""
+    """Mocker en Discord-kanal."""
     channel = Mock()
     channel.send = AsyncMock()
     return channel
@@ -30,7 +30,7 @@ def mock_channel():
 class TestFantasyReminders:
     
     def test_init(self, mock_bot):
-        """Test FantasyReminders initializes correctly."""
+        """Tester at FantasyReminders initialiseres riktig."""
         with patch.object(FantasyReminders, 'reminder_scheduler', return_value=None):
             cog = FantasyReminders(mock_bot)
             
@@ -40,7 +40,7 @@ class TestFantasyReminders:
 
     @pytest.mark.asyncio
     async def test_tuesday_reminder_sent(self, mock_bot, mock_channel):
-        """Test that reminder is sent on Tuesday at 18:00."""
+        """Tester at påminnelser sendes tirsdager klokken 18:00."""
         mock_bot.get_channel.return_value = mock_channel
         
         # Mock Tuesday at 18:00
@@ -68,7 +68,7 @@ class TestFantasyReminders:
 
     @pytest.mark.asyncio
     async def test_no_duplicate_reminders_same_week(self, mock_bot, mock_channel):
-        """Test that reminder isn't sent twice in the same week."""
+        """Tester at påminnelser ikke sendes to ganger samme uke."""
         mock_bot.get_channel.return_value = mock_channel
         
         tuesday = pytz.timezone("Europe/Oslo").localize(datetime(2024, 1, 2, 18, 0, 0))
@@ -88,7 +88,7 @@ class TestFantasyReminders:
 
     @pytest.mark.asyncio
     async def test_setup_function(self, mock_bot):
-        """Test that setup function works correctly."""
+        """Tester at setup-funksjonen virker."""
         await setup(mock_bot)
         mock_bot.add_cog.assert_called_once()
 
