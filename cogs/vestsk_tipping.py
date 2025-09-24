@@ -28,8 +28,8 @@ from core.errors import (
 )
 
 # Discord kanal-IDer
-TIPPE_CHANNEL_ID = 752538512250765314  # Kanal for tipping
-INFO_CHANNEL_ID = 795485646545748058   # Kanal for informasjon og resultater
+PREIK_KANAL = 752538512250765314  # Kanal for oppdatering om posting av kamper og påminnelser
+VESTSK_KANAL = 795485646545748058   # Kanal for informasjon og resultater
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
@@ -145,7 +145,8 @@ class VestskTipping(commands.Cog):
         await self._kamper_impl(ctx, uke)
 
     async def _kamper_impl(self, ctx, uke: int = None):
-        season = datetime.now().year
+        now = datetime.now()
+        season = now.year if now.month >= 3 else now.year - 1
         url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
                if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
         try:
@@ -169,10 +170,15 @@ class VestskTipping(commands.Cog):
             away_team = away["team"]["displayName"]
             await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ "
                f"{home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
+            
+        # Send en melding i preik
+        kanal = ctx.bot.get_channel(PREIK_KANAL)
+        if kanal:
+            await kanal.send(f"Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(TIPPE_CHANNEL_ID)
+        channel = self.bot.get_channel(VESTSK_KANAL)
 
         while True:
             now = datetime.now(self.norsk_tz)
@@ -191,7 +197,7 @@ class VestskTipping(commands.Cog):
                             await channel.send(
                                 (
                                     f"@everyone RAUÅ I GIR, ukå begynne snart så sjekk "
-                                    f"<#{INFO_CHANNEL_ID}>!"
+                                    f"<#{VESTSK_KANAL}>!"
                                 )
                             )
                             self.last_reminder_week = week_num
@@ -243,7 +249,7 @@ class VestskTipping(commands.Cog):
                                 or self.last_reminder_sunday != first_sunday_game.date()
                             ):
                                 await channel.send(
-                                    f"@everyone Early window snart, husk <#{INFO_CHANNEL_ID}>"
+                                    f"@everyone Early window snart, husk <#{VESTSK_KANAL}>"
                                 )
                                 self.last_reminder_sunday = first_sunday_game.date()
                                 logger.info(
@@ -313,7 +319,7 @@ class VestskTipping(commands.Cog):
 
         emoji_to_team_short = {v: k for k, v in team_emojis.items()}
 
-        # Bruk klassen sin statiske filtreringsfunksjon
+        # Bruk klassens statiske filtreringsfunksjon
         is_valid_game_message = VestskTipping.is_valid_game_message
 
         messages = []
@@ -399,7 +405,8 @@ class VestskTipping(commands.Cog):
         logger.debug(f"Henter sheet: {sheet.title if sheet else 'None'}")
 
         norsk_tz = pytz.timezone("Europe/Oslo")
-        season = datetime.now(norsk_tz).year
+        now = datetime.now(norsk_tz)
+        season = now.year if now.month >= 3 else now.year - 1
         logger.debug(f"Sesong: {season}")
 
         url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
