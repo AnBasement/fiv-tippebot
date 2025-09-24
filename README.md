@@ -28,6 +28,10 @@ PPR er fantasyligaens "power ranking" som forsøker å sette et tall til hvor br
 
 Botten har også en rekke enkle responskommandoer som for det meste kommer fra interne vitser.
 
+### Annet
+
+Botten sender en påminnelse på tirsdager om å ikke glemme waivers før ny uke starter.
+
 ## Planlagte funksjoner
 
 ### Trivia
