@@ -26,10 +26,7 @@ from core.errors import (
     ResultaterError,
 )
 from core.decorators import admin_only
-
-# Discord kanal-IDer
-TIPPE_CHANNEL_ID = 752538512250765314  # Kanal for tipping
-INFO_CHANNEL_ID = 795485646545748058   # Kanal for informasjon og resultater
+from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
@@ -130,7 +127,8 @@ class VestskTipping(commands.Cog):
         await self._kamper_impl(ctx, uke)
 
     async def _kamper_impl(self, ctx, uke: int = None):
-        season = datetime.now().year
+        now = datetime.now()
+        season = now.year if now.month >= 3 else now.year - 1
         url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
                if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
         try:
@@ -154,10 +152,15 @@ class VestskTipping(commands.Cog):
             away_team = away["team"]["displayName"]
             await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ "
                f"{home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
+            
+        # Send en melding i preik
+        kanal = ctx.bot.get_channel(PREIK_KANAL)
+        if kanal:
+            await kanal.send(f"Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(TIPPE_CHANNEL_ID)
+        channel = self.bot.get_channel(VESTSK_KANAL)
 
         while True:
             now = datetime.now(self.norsk_tz)
@@ -176,7 +179,7 @@ class VestskTipping(commands.Cog):
                             await channel.send(
                                 (
                                     f"@everyone RAUÅ I GIR, ukå begynne snart så sjekk "
-                                    f"<#{INFO_CHANNEL_ID}>!"
+                                    f"<#{VESTSK_KANAL}>!"
                                 )
                             )
                             self.last_reminder_week = week_num
@@ -228,7 +231,7 @@ class VestskTipping(commands.Cog):
                                 or self.last_reminder_sunday != first_sunday_game.date()
                             ):
                                 await channel.send(
-                                    f"@everyone Early window snart, husk <#{INFO_CHANNEL_ID}>"
+                                    f"@everyone Early window snart, husk <#{VESTSK_KANAL}>"
                                 )
                                 self.last_reminder_sunday = first_sunday_game.date()
                                 logger.info(
@@ -298,7 +301,7 @@ class VestskTipping(commands.Cog):
 
         emoji_to_team_short = {v: k for k, v in team_emojis.items()}
 
-        # Bruk klassen sin statiske filtreringsfunksjon
+        # Bruk klassens statiske filtreringsfunksjon
         is_valid_game_message = VestskTipping.is_valid_game_message
 
         messages = []
@@ -384,7 +387,8 @@ class VestskTipping(commands.Cog):
         logger.debug(f"Henter sheet: {sheet.title if sheet else 'None'}")
 
         norsk_tz = pytz.timezone("Europe/Oslo")
-        season = datetime.now(norsk_tz).year
+        now = datetime.now(norsk_tz)
+        season = now.year if now.month >= 3 else now.year - 1
         logger.debug(f"Sesong: {season}")
 
         url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
@@ -444,14 +448,17 @@ class VestskTipping(commands.Cog):
         sheet_rows = (await asyncio.to_thread(sheet.get_all_values))[2:]
         sheet_kamper = []
         row_mapping = {}
+        gyldige_kampkoder = set(kamp_resultater.keys())
         for i, row in enumerate(sheet_rows, start=3):
             kampkode = row[0].strip()
-            if kampkode:
+            if kampkode in gyldige_kampkoder:
                 sheet_kamper.append(kampkode)
                 row_mapping[len(sheet_kamper)-1] = i
+
         logger.debug(f"Kamper i sheet: {sheet_kamper}")
         logger.debug(f"Row mapping: {row_mapping}")
 
+        # Finn raden rett etter siste kamp for denne uken
         uke_total_row = max(row_mapping.values(), default=3) + 1
         sesong_total_row = uke_total_row + 1
         logger.debug(f"Uke total rad: {uke_total_row}, sesong total rad: {sesong_total_row}")
@@ -494,6 +501,12 @@ class VestskTipping(commands.Cog):
                 if cell_obj is None:
                     continue
                 cell_value = cell_obj.value
+
+                logger.debug(
+                    f"Kampkode={kampkode}, riktig_vinner={riktig_vinner}, "
+                    f"teams={[ (v.get('short'), v.get('name')) for v in teams.values() ]}"
+                )
+
                 gyldige_svar = (
                     [riktig_vinner] if riktig_vinner == "Uavgjort" 
                     else [
@@ -520,34 +533,58 @@ class VestskTipping(commands.Cog):
 
         logger.info(f"Ukespoeng: {uke_poeng}")
 
-        # Ukespoeng og sesongpoeng batch-read og batch-write
-        uke_poeng_cells = await asyncio.to_thread(
-            sheet.range,
-            uke_total_row,
-            start_col,
-            uke_total_row,
-            end_col
-        )
-        for pidx, cell_obj in enumerate(uke_poeng_cells):
+        # --- Sett inn Ukespoeng på ny rad etter denne ukens kamper ---
+        # Skriv "Ukespoeng" i kolA
+        uke_label_cell = await asyncio.to_thread(sheet.cell, uke_total_row, 1)
+        uke_label_cell.value = "Ukespoeng"
+        cell_updates.append(uke_label_cell)
+
+        # Skriv ukespoeng i kolonnene
+        for pidx, discord_id in enumerate(player_ids):
+            col_idx = start_col + pidx
+            cell_obj = await asyncio.to_thread(sheet.cell, uke_total_row, col_idx)
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
                 cell_obj.value = poeng
                 cell_updates.append(cell_obj)
 
-        # Sesongpoeng: rad sesong_total_row, kolonner start_col -> end_col
-        sesong_poeng_cells = await asyncio.to_thread(
-            sheet.range,
-            sesong_total_row,
-            start_col,
-            sesong_total_row,
-            end_col
-        )
-        for pidx, cell_obj in enumerate(sesong_poeng_cells):
-            prev = cell_obj.value
-            prev_val = int(prev) if prev and str(prev).isdigit() else 0
-            new_val = prev_val + uke_poeng[pidx]
-            if str(cell_obj.value) != str(new_val):
-                cell_obj.value = new_val
+        # --- Sett inn Ukespoeng på ny rad etter denne ukens kamper ---
+        uke_label_cell = await asyncio.to_thread(sheet.cell, uke_total_row, 1)
+        uke_label_cell.value = "Ukespoeng"
+        cell_updates.append(uke_label_cell)
+
+        # Skriv ukespoeng i kolonnene
+        for pidx, discord_id in enumerate(player_ids):
+            col_idx = start_col + pidx
+            cell_obj = await asyncio.to_thread(sheet.cell, uke_total_row, col_idx)
+            poeng = uke_poeng[pidx]
+            if str(cell_obj.value) != str(poeng):
+                cell_obj.value = poeng
+                cell_updates.append(cell_obj)
+
+        # --- Finn siste Sesongpoeng-rad for å hente forrige totalsum ---
+        all_sheet_rows = await asyncio.to_thread(sheet.get_all_values)
+        forrige_sesong_row = None
+        for i, row in enumerate(all_sheet_rows, start=1):
+            if row and row[0].strip() == "Sesongpoeng":
+                forrige_sesong_row = i
+
+        # --- Sett inn Sesongpoeng på rad rett under Ukespoeng ---
+        sesong_label_cell = await asyncio.to_thread(sheet.cell, uke_total_row + 1, 1)
+        sesong_label_cell.value = "Sesongpoeng"
+        cell_updates.append(sesong_label_cell)
+
+        for pidx, discord_id in enumerate(player_ids):
+            col_idx = start_col + pidx
+            tidligere_total = 0
+            if forrige_sesong_row:
+                val = all_sheet_rows[forrige_sesong_row-1][col_idx-1]
+                tidligere_total = int(val) if val and str(val).isdigit() else 0
+
+            ny_total = tidligere_total + uke_poeng[pidx]
+            cell_obj = await asyncio.to_thread(sheet.cell, uke_total_row + 1, col_idx)
+            if str(cell_obj.value) != str(ny_total):
+                cell_obj.value = ny_total
                 cell_updates.append(cell_obj)
 
         # === Batch update alle celler ===

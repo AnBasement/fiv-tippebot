@@ -107,7 +107,7 @@ async def test_logging_on_export(monkeypatch):
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
     cog.bot = MagicMock()
 
-    from unittest.mock import AsyncMock
+    # Sett opp mock ctx
     ctx = MagicMock()
     ctx.send = AsyncMock()
     ctx.channel = MagicMock()
@@ -115,19 +115,22 @@ async def test_logging_on_export(monkeypatch):
 
     monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
 
-    # Sett opp mock sheet data
+    # Mock sheet data
     sheet.col_values.return_value = [""]  # tom første kolonne
     sheet.row_values.return_value = ["", "111"]
     sheet.cell = AsyncMock()
+    sheet.get_all_values.return_value = [["A", "old1"]]
+
     cog.get_current_week = lambda self=None: 1
-    cog.get_players = lambda self=None: {"A": 1}  # må være mapping id → kolonne
-    oslo_tz = pytz.timezone("Europe/Oslo")
-    now = oslo_tz.localize(datetime(2025, 9, 20, 12, 0))
+    cog.get_players = lambda self=None: {"A": 1}  # mapping id → kolonne
 
     # Sett opp bot user
     bot_user = MagicMock()
     cog.bot.user = bot_user
 
+    # Sett opp melding med nåværende dato, slik at den alltid er etter start_of_week
+    oslo_tz = pytz.timezone("Europe/Oslo")
+    now = datetime.now(oslo_tz)
     msg = MagicMock(content="Patriots @ Giants")
     msg.created_at = now
     msg.author = bot_user
@@ -136,12 +139,13 @@ async def test_logging_on_export(monkeypatch):
     async def mock_history(*args, **kwargs):
         for m in [msg]:
             yield m
+
     ctx.channel.history.return_value = mock_history()
 
-    sheet.get_all_values.return_value = [["A", "old1"]]
-
+    # Kjør eksport
     await cog._export_impl(ctx)
 
+    # Sjekk at melding ble sendt
     ctx.send.assert_awaited_with("Kampdata eksportert til Sheets.")
 
 @pytest.mark.asyncio
