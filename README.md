@@ -83,7 +83,6 @@ Vær klar over at denne botten er laget spesifikt for en privat server. Det vil 
     DISCORD_TOKEN=din_discord_bot_token
     GOOGLE_SHEETS_KEYFILE=sti_til_credentials.json
     ADMIN_IDS=komma,separert,liste,med,discord,ids
-    ADMIN_CHANNEL_ID=discord_kanal_id
     ```
 
 4. Start botten:
@@ -108,6 +107,7 @@ Vær klar over at denne botten er laget spesifikt for en privat server. Det vil 
 │       └── global_cooldown.py      # Cooldown for kommandospam
 ├── data/                           # Statisk data og konfigurasjon
 │   ├── brukere.py                  # Bruker- og lagdata
+│   ├── channel_ids.py              # IDer for Discord-kanaler
 │   └── teams.py                    # NFL-lagdata og emojis
 └── tests/                          # Testsuite
     ├── test_fantasy_reminders.py  
