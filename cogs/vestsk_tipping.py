@@ -160,7 +160,7 @@ class VestskTipping(commands.Cog):
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(VESTSK_KANAL)
+        channel = self.bot.get_channel(PREIK_KANAL)
 
         while True:
             now = datetime.now(self.norsk_tz)
