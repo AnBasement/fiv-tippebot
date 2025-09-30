@@ -1,7 +1,8 @@
 """
 Hovedmodul for Vestsk Tipping-funksjonalitet.
 
-Denne modulen håndterer all funksjonalitet relatert til Vestsk Tipping, inkludert:
+Denne modulen håndterer all funksjonalitet relatert til Vestsk Tipping,
+inkludert:
 - Registrering av bets
 - Eksport av bets til Google Sheets
 - Resultatoppdatering og poengberegning
@@ -15,7 +16,6 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import asyncio
-import os
 import logging
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
@@ -26,54 +26,44 @@ from core.errors import (
     ExportError,
     ResultaterError,
 )
+from core.decorators import admin_only
 from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def parse_espn_date(datestr: str) -> datetime:
     """Konverterer ESPN API datoformat til datetime.
-    
+
     Args:
         datestr (str): Datostrengen fra ESPN API (ISO format med 'Z')
-    
+
     Returns:
         datetime: Konvertert datetime-objekt i UTC
-    
+
     Example:
         >>> parse_espn_date("2025-09-21T18:00Z")
         datetime(2025, 9, 21, 18, 0, tzinfo=UTC)
     """
     return datetime.fromisoformat(datestr.replace("Z", "+00:00"))
 
-def admin_only():
-    """Dekorator som sjekker om brukeren har admin-tilgang.
-    
-    Henter admin-IDer fra miljøvariabelen ADMIN_IDS og sjekker om
-    brukerens Discord ID er i denne listen.
-    
-    Returns:
-        function: En check-funksjon som returnerer True for admin-brukere
-    
-    Raises:
-        CheckFailure: Hvis brukeren ikke er admin
-    """
-    ADMIN_IDS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
-    return commands.check(lambda ctx: str(ctx.author.id) in ADMIN_IDS)
 
 class VestskTipping(commands.Cog):
     """Cog for håndtering av Vestsk Tipping.
-    
+
     Denne cog-en inneholder all logikk for tipping på NFL-kamper,
     inkludert registrering av bets, eksport til Google Sheets,
     resultatoppdatering og automatiske påminnelser.
-    
+
     Attributes:
         bot (commands.Bot): Discord bot-instansen
         norsk_tz (tzinfo): Tidssone for Norge (Europe/Oslo)
-        last_reminder_week (Optional[int]): Siste uke det ble sendt påminnelse
-        last_reminder_sunday (Optional[datetime]): Siste søndag det ble sendt påminnelse
+        last_reminder_week (Optional[int]): Siste uke det ble sendt
+            påminnelse
+        last_reminder_sunday (Optional[datetime]): Siste søndag det ble
+            sendt påminnelse
         reminder_task (asyncio.Task): Async task for påminnelser
     """
 
@@ -102,8 +92,10 @@ class VestskTipping(commands.Cog):
         clean_text = re.sub(r'<:.+?:\d+>', '', msg_content).strip()
         if re.search(r'<@|@everyone|@here', clean_text):
             return False
-        return bool(re.match(r'^[A-Za-z0-9 .]+ @ [A-Za-z0-9 .]+$', clean_text) or
-                   re.match(r'^[A-Za-z0-9 .]+ - [A-Za-z0-9 .]+: \d+-\d+$', clean_text))
+        return bool(
+            re.match(r'^[A-Za-z0-9 .]+ @ [A-Za-z0-9 .]+$', clean_text) or
+            re.match(r'^[A-Za-z0-9 .]+ - [A-Za-z0-9 .]+: \d+-\d+$', clean_text)
+        )
 
     def __init__(self, bot):
         """Initialiserer VestskTipping cog.
@@ -115,7 +107,8 @@ class VestskTipping(commands.Cog):
         self.norsk_tz = pytz.timezone("Europe/Oslo")
         self.last_reminder_week = None
         self.last_reminder_sunday = None
-        self.reminder_task = self.bot.loop.create_task(self.reminder_scheduler())
+        task = self.reminder_scheduler()
+        self.reminder_task = self.bot.loop.create_task(task)
 
     def get_players(self, sheet) -> dict:
         """
@@ -133,7 +126,9 @@ class VestskTipping(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         if isinstance(error, CheckFailure):
-            await ctx.send("Kanskje hvis du spør veldig pent så kan du få lov te å bruke botten.")
+            await ctx.send(
+                "Kanskje hvis du spør veldig pent så kan du få lov te å bruke botten."
+            )
 
     # === kamper ===
     @commands.command()
@@ -175,7 +170,7 @@ class VestskTipping(commands.Cog):
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(PREIK_KANAL)
+        channel = self.bot.get_channel(VESTSK_KANAL)
 
         while True:
             now = datetime.now(self.norsk_tz)
@@ -310,28 +305,49 @@ class VestskTipping(commands.Cog):
 
         norsk_tz = pytz.timezone("Europe/Oslo")
         now = datetime.now(norsk_tz)
-        days_since_tue = (now.weekday() - 1) % 7
-        start_of_week = now - timedelta(days=days_since_tue)
-        start_of_week = start_of_week.replace(hour=10, minute=0, second=0, microsecond=0)
-
+        
+        # Søk bakover i tid for å finne siste gruppe med bot-meldinger
+        # Begrens søket til siste 14 dager for å unngå for gamle meldinger
+        search_limit = now - timedelta(days=14)
+        
         emoji_to_team_short = {v: k for k, v in team_emojis.items()}
-
-        # Bruk klassens statiske filtreringsfunksjon
         is_valid_game_message = VestskTipping.is_valid_game_message
 
-        messages = []
-        end_of_week = start_of_week + timedelta(days=7)
-        async for msg in channel.history(limit=100, after=start_of_week):
+        # Hent alle bot-meldinger fra de siste 14 dagene
+        all_bot_messages = []
+        async for msg in channel.history(limit=200, after=search_limit):
             if (
                 msg.author == self.bot.user
                 and is_valid_game_message(msg.content)
-                and start_of_week <= msg.created_at.replace(tzinfo=norsk_tz) < end_of_week
             ):
-                messages.append(msg)
+                all_bot_messages.append(msg)
+        
+        if not all_bot_messages:
+            raise ExportError(f"Ingen gyldige bot-meldinger funnet siden {search_limit}")
+        
+        # Sorter meldingene etter tid (nyeste først)
+        all_bot_messages.sort(key=lambda m: m.created_at, reverse=True)
+        
+        # Finn den nyeste gruppen med meldinger (samme sesjon)
+        # Stopp ved første gap på mer enn 2 timer mellom meldinger
+        messages = [all_bot_messages[0]]  # Start med nyeste melding
+        
+        for i in range(1, len(all_bot_messages)):
+            current_msg = all_bot_messages[i]
+            previous_msg = all_bot_messages[i-1]
+            
+            # Hvis det er mer enn 2 timer mellom meldingene, stopp
+            time_diff = previous_msg.created_at - current_msg.created_at
+            if time_diff.total_seconds() > 7200:  # 2 timer = 7200 sekunder
+                break
+                
+            messages.append(current_msg)
+        
+        # Sorter tilbake til kronologisk rekkefølge
         messages.sort(key=lambda m: m.created_at)
 
         if not messages:
-            raise ExportError(f"Ingen meldinger funnet å eksportere etter {start_of_week}")
+            raise ExportError("Ingen meldinger funnet fra siste posting")
 
         values = []
         for msg in messages:
