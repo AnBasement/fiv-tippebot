@@ -1,9 +1,12 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
+
 
 @pytest.fixture(autouse=True)
 def mock_gspread(monkeypatch):
-    """Mock Google Sheets-tilgang slik at tests kan kjøre uten credentials.json"""
+    """
+    Mock Google Sheets-tilgang slik at tests kan kjøre uten credentials.json
+    """
 
     # Mock ServiceAccountCredentials
     import oauth2client.service_account as sac
@@ -27,7 +30,10 @@ def mock_gspread(monkeypatch):
     # Mock sheet-funksjoner hvis de brukes direkte
     mock_sheet.sheet1 = MagicMock()
     mock_sheet.row_values.return_value = ["ID1", "ID2", "ID3"]
-    mock_sheet.get_all_values.return_value = [["Kamp1", "", ""], ["Kamp2", "", ""]]
+    mock_sheet.get_all_values.return_value = [
+        ["Kamp1", "", ""],
+        ["Kamp2", "", ""]
+    ]
     mock_sheet.cell.return_value.value = "Test"
     mock_sheet.update_cell.return_value = None
     mock_sheet.range.return_value = []

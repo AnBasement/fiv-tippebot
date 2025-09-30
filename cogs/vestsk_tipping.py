@@ -70,17 +70,17 @@ class VestskTipping(commands.Cog):
     @staticmethod
     def is_valid_game_message(msg_content: str) -> bool:
         """Validerer om en melding er et gyldig kampformat.
-        
+
         Godtar to formater:
         1. 'lag @ lag' for tipping
         2. 'lag - lag: score-score' for resultat
-        
+
         Args:
             msg_content (str): Meldingsinnholdet som skal valideres
-        
+
         Returns:
             bool: True hvis meldingen er gyldig kampformat
-        
+
         Example:
             >>> is_valid_game_message("Patriots @ Bills")
             True
@@ -99,7 +99,7 @@ class VestskTipping(commands.Cog):
 
     def __init__(self, bot):
         """Initialiserer VestskTipping cog.
-        
+
         Args:
             bot (commands.Bot): Discord bot-instansen
         """
@@ -127,7 +127,8 @@ class VestskTipping(commands.Cog):
     async def on_command_error(self, ctx, error):
         if isinstance(error, CheckFailure):
             await ctx.send(
-                "Kanskje hvis du spør veldig pent så kan du få lov te å bruke botten."
+                "Kanskje hvis du spør veldig pent så kan du få lov te å "
+                "bruke botten."
             )
 
     # === kamper ===
@@ -139,8 +140,14 @@ class VestskTipping(commands.Cog):
     async def _kamper_impl(self, ctx, uke: int = None):
         now = datetime.now()
         season = now.year if now.month >= 3 else now.year - 1
-        url = (f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={uke}"
-               if uke else "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard")
+        base_url = (
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/"
+            "scoreboard"
+        )
+        if uke:
+            url = f"{base_url}?dates={season}&seasontype=2&week={uke}"
+        else:
+            url = base_url
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
@@ -160,9 +167,12 @@ class VestskTipping(commands.Cog):
             away = next(c for c in comps if c["homeAway"] == "away")
             home_team = home["team"]["displayName"]
             away_team = away["team"]["displayName"]
-            await ctx.send(f"{teams.get(away_team, {'emoji':''})['emoji']} {away_team} @ "
-               f"{home_team} {teams.get(home_team, {'emoji':''})['emoji']}")
-            
+            away_emoji = teams.get(away_team, {'emoji': ''})['emoji']
+            home_emoji = teams.get(home_team, {'emoji': ''})['emoji']
+            await ctx.send(
+                f"{away_emoji} {away_team} @ {home_team} {home_emoji}"
+            )
+
         # Send en melding i preik
         kanal = ctx.bot.get_channel(PREIK_KANAL)
         if kanal:
@@ -180,15 +190,19 @@ class VestskTipping(commands.Cog):
                 # === Torsdagspåminnelse ===
                 if weekday == 3:
                     week_num = now.isocalendar()[1]
-                    reminder_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
+                    reminder_time = now.replace(
+                        hour=18, minute=0, second=0, microsecond=0
+                    )
                     if now < reminder_time:
                         sleep_seconds = (reminder_time - now).total_seconds()
                         await asyncio.sleep(sleep_seconds)
 
-                        if self.last_reminder_week is None or self.last_reminder_week != week_num:
+                        if (self.last_reminder_week is None or
+                                self.last_reminder_week != week_num):
                             await channel.send(
                                 (
-                                    f"@everyone RAUÅ I GIR, ukå begynne snart så sjekk "
+                                    "@everyone RAUÅ I GIR, ukå begynne snart "
+                                    "så sjekk "
                                     f"<#{VESTSK_KANAL}>!"
                                 )
                             )
@@ -199,14 +213,19 @@ class VestskTipping(commands.Cog):
                             )
 
                         tomorrow = reminder_time + timedelta(days=1)
-                        await asyncio.sleep(
-                            (tomorrow - datetime.now(self.norsk_tz)).total_seconds()
-                        )
+                        time_diff = (
+                            tomorrow - datetime.now(self.norsk_tz)
+                        ).total_seconds()
+                        await asyncio.sleep(time_diff)
                         continue
 
                 # === Søndagspåminnelse ===
                 if weekday == 6:
-                    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+                    url = (
+                        "https://site.api.espn.com/apis/site/v2/sports/"
+                        "football/"
+                        "nfl/scoreboard"
+                    )
 
                     try:
                         async with aiohttp.ClientSession() as session:
@@ -214,7 +233,8 @@ class VestskTipping(commands.Cog):
                                 data = await resp.json()
                     except Exception as e:
                         logger.error(
-                            f"Kunne ikke hente data fra ESPN API: {e}. Prøver igjen om 5 min."
+                            f"Kunne ikke hente data fra ESPN API: {e}. "
+                            "Prøver igjen om 5 min."
                         )
                         await asyncio.sleep(300)  # backoff før retry
                         continue
@@ -222,7 +242,9 @@ class VestskTipping(commands.Cog):
                     events = data.get("events", [])
                     sunday_events = [
                         ev for ev in events
-                        if parse_espn_date(ev["date"]).astimezone(self.norsk_tz).weekday() == 6
+                        if parse_espn_date(ev["date"]).astimezone(
+                            self.norsk_tz
+                        ).weekday() == 6
                     ]
 
                     if sunday_events:
@@ -230,39 +252,54 @@ class VestskTipping(commands.Cog):
                         first_sunday_game = parse_espn_date(
                             sunday_events[0]["date"]
                         ).astimezone(self.norsk_tz)
-                        reminder_time = first_sunday_game - timedelta(minutes=60)
+                        reminder_time = (
+                            first_sunday_game - timedelta(minutes=60)
+                        )
 
                         if now < reminder_time:
-                            sleep_seconds = (reminder_time - now).total_seconds()
+                            sleep_seconds = (
+                                reminder_time - now
+                            ).total_seconds()
                             await asyncio.sleep(sleep_seconds)
 
                             if (
                                 self.last_reminder_sunday is None
-                                or self.last_reminder_sunday != first_sunday_game.date()
+                                or (self.last_reminder_sunday !=
+                                    first_sunday_game.date())
                             ):
                                 await channel.send(
-                                    f"@everyone Early window snart, husk <#{VESTSK_KANAL}>"
+                                    "@everyone Early window snart, husk "
+                                    f"<#{VESTSK_KANAL}>"
                                 )
-                                self.last_reminder_sunday = first_sunday_game.date()
+                                self.last_reminder_sunday = (
+                                    first_sunday_game.date()
+                                )
                                 logger.info(
-                                    f"Søndagspåminnelse sendt for {first_sunday_game.date()} "
+                                    "Søndagspåminnelse sendt for "
+                                    f"{first_sunday_game.date()} "
                                     f"({reminder_time})"
                                 )
 
                             tomorrow = reminder_time + timedelta(days=1)
                             await asyncio.sleep(
-                                (tomorrow - datetime.now(self.norsk_tz)).total_seconds()
+                                (
+                                    tomorrow - datetime.now(self.norsk_tz)
+                                ).total_seconds()
                             )
                             continue
 
                 # === Beregn tid til neste vindu ===
                 next_thursday = now + timedelta(days=(3 - weekday) % 7)
-                next_thursday = next_thursday.replace(hour=18, minute=0, second=0, microsecond=0)
+                next_thursday = next_thursday.replace(
+                    hour=18, minute=0, second=0, microsecond=0
+                )
                 if next_thursday <= now:
                     next_thursday += timedelta(days=7)
 
                 next_sunday = now + timedelta(days=(6 - weekday) % 7)
-                next_sunday = next_sunday.replace(hour=8, minute=0, second=0, microsecond=0)
+                next_sunday = next_sunday.replace(
+                    hour=8, minute=0, second=0, microsecond=0
+                )
                 if next_sunday <= now:
                     next_sunday += timedelta(days=7)
 
@@ -271,7 +308,9 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(sleep_seconds)
 
             except Exception as e:
-                logger.error(f"Feil i reminder_scheduler: {e}. Prøver igjen om 5 min.")
+                logger.error(
+                    f"Feil i reminder_scheduler: {e}. Prøver igjen om 5 min."
+                )
                 await asyncio.sleep(300)  # generell backoff før retry
 
     def _format_event(self, ev):
@@ -305,11 +344,11 @@ class VestskTipping(commands.Cog):
 
         norsk_tz = pytz.timezone("Europe/Oslo")
         now = datetime.now(norsk_tz)
-        
+
         # Søk bakover i tid for å finne siste gruppe med bot-meldinger
         # Begrens søket til siste 14 dager for å unngå for gamle meldinger
         search_limit = now - timedelta(days=14)
-        
+
         emoji_to_team_short = {v: k for k, v in team_emojis.items()}
         is_valid_game_message = VestskTipping.is_valid_game_message
 
@@ -321,28 +360,30 @@ class VestskTipping(commands.Cog):
                 and is_valid_game_message(msg.content)
             ):
                 all_bot_messages.append(msg)
-        
+
         if not all_bot_messages:
-            raise ExportError(f"Ingen gyldige bot-meldinger funnet siden {search_limit}")
-        
+            raise ExportError(
+                f"Ingen gyldige bot-meldinger funnet siden {search_limit}"
+            )
+
         # Sorter meldingene etter tid (nyeste først)
         all_bot_messages.sort(key=lambda m: m.created_at, reverse=True)
-        
+
         # Finn den nyeste gruppen med meldinger (samme sesjon)
         # Stopp ved første gap på mer enn 2 timer mellom meldinger
         messages = [all_bot_messages[0]]  # Start med nyeste melding
-        
+
         for i in range(1, len(all_bot_messages)):
             current_msg = all_bot_messages[i]
             previous_msg = all_bot_messages[i-1]
-            
+
             # Hvis det er mer enn 2 timer mellom meldingene, stopp
             time_diff = previous_msg.created_at - current_msg.created_at
             if time_diff.total_seconds() > 7200:  # 2 timer = 7200 sekunder
                 break
-                
+
             messages.append(current_msg)
-        
+
         # Sorter tilbake til kronologisk rekkefølge
         messages.sort(key=lambda m: m.created_at)
 
@@ -356,8 +397,12 @@ class VestskTipping(commands.Cog):
             if len(comps) == 2:
                 away_team_full = comps[0].strip()
                 home_team_full = comps[1].strip()
-                away = team_location.get(away_team_full, away_team_full.split()[-1])
-                home = team_location.get(home_team_full, home_team_full.split()[-1])
+                away = team_location.get(
+                    away_team_full, away_team_full.split()[-1]
+                )
+                home = team_location.get(
+                    home_team_full, home_team_full.split()[-1]
+                )
                 kampkode = f"{away}@{home}"
             else:
                 kampkode = clean_text
@@ -372,7 +417,9 @@ class VestskTipping(commands.Cog):
                         if emoji_str == DRAW_EMOJI:
                             row[col_idx] = "Uavgjort"
                         else:
-                            row[col_idx] = emoji_to_team_short.get(emoji_str, "")
+                            row[col_idx] = emoji_to_team_short.get(
+                                emoji_str, ""
+                            )
             values.append(row)
 
         all_rows_colA = await asyncio.to_thread(sheet.col_values, 1)
@@ -393,7 +440,9 @@ class VestskTipping(commands.Cog):
                     cell_obj.value = val
                 await asyncio.to_thread(sheet.update_cells, cell_range)
             except Exception as e:
-                raise ExportError(f"Feil ved eksport til sheet '{sheet.title}': {e}") from e
+                raise ExportError(
+                    f"Feil ved eksport til sheet '{sheet.title}': {e}"
+                ) from e
 
             await ctx.send("Kampdata eksportert til Sheets.")
         else:
@@ -411,7 +460,9 @@ class VestskTipping(commands.Cog):
         try:
             sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
             if not sheet:
-                raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
+                raise ResultaterError(
+                    "Kunne ikke hente worksheet 'Vestsk Tipping'"
+                )
         except Exception as e:
             raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
 
@@ -422,7 +473,10 @@ class VestskTipping(commands.Cog):
         season = now.year if now.month >= 3 else now.year - 1
         logger.debug(f"Sesong: {season}")
 
-        url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+        url = (
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/"
+            "scoreboard"
+        )
         if uke:
             url += f"?dates={season}&seasontype=2&week={uke}"
         logger.debug(f"Henter URL: {url}")
@@ -460,7 +514,8 @@ class VestskTipping(commands.Cog):
                 away_score = int(away["score"])
             except Exception as e:
                 raise ResultaterError(
-                    f"Feil ved parsing av kampdata for {ev.get('id', 'ukjent')}"
+                    "Feil ved parsing av kampdata for "
+                    f"{ev.get('id', 'ukjent')}"
                 ) from e
 
             if home_score > away_score:
@@ -492,7 +547,10 @@ class VestskTipping(commands.Cog):
         # Finn raden rett etter siste kamp for denne uken
         uke_total_row = max(row_mapping.values(), default=3) + 1
         sesong_total_row = uke_total_row + 1
-        logger.debug(f"Uke total rad: {uke_total_row}, sesong total rad: {sesong_total_row}")
+        logger.debug(
+            f"Uke total rad: {uke_total_row}, "
+            f"sesong total rad: {sesong_total_row}"
+        )
 
         green = green_format()
         red = red_format()
@@ -500,7 +558,7 @@ class VestskTipping(commands.Cog):
 
         uke_poeng = [0] * num_players
 
-        # Kolonneindekser: discord_id → col_idx (start på 2, men batch-read starter på 2)
+        # Kolonneindekser: discord_id → col_idx (batch-read starter på 2)
         player_ids = list(players.keys())
         start_col = 2
         end_col = start_col + num_players - 1
@@ -524,7 +582,9 @@ class VestskTipping(commands.Cog):
         for idx, kampkode in enumerate(sheet_kamper):
             row_idx = row_mapping[idx]
             riktig_vinner = kamp_resultater.get(kampkode)
-            logger.debug(f"Prosesserer kamp {kampkode} (riktig vinner: {riktig_vinner})")
+            logger.debug(
+                f"Prosesserer kamp {kampkode} (riktig vinner: {riktig_vinner})"
+            )
 
             for pidx, discord_id in enumerate(player_ids):
                 col_idx = start_col + pidx
@@ -535,14 +595,17 @@ class VestskTipping(commands.Cog):
 
                 logger.debug(
                     f"Kampkode={kampkode}, riktig_vinner={riktig_vinner}, "
-                    f"teams={[ (v.get('short'), v.get('name')) for v in teams.values() ]}"
+                    "teams=" + str([
+                        (v.get('short'), v.get('name'))
+                        for v in teams.values()
+                    ])
                 )
 
                 gyldige_svar = (
-                    [riktig_vinner] if riktig_vinner == "Uavgjort" 
+                    [riktig_vinner] if riktig_vinner == "Uavgjort"
                     else [
-                        v["short"] 
-                        for v in teams.values() 
+                        v["short"]
+                        for v in teams.values()
                         if v["short"].lower() == riktig_vinner.lower()
                     ]
                 )
@@ -573,7 +636,9 @@ class VestskTipping(commands.Cog):
         # Skriv ukespoeng i kolonnene
         for pidx, discord_id in enumerate(player_ids):
             col_idx = start_col + pidx
-            cell_obj = await asyncio.to_thread(sheet.cell, uke_total_row, col_idx)
+            cell_obj = await asyncio.to_thread(
+                sheet.cell, uke_total_row, col_idx
+            )
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
                 cell_obj.value = poeng
@@ -587,7 +652,9 @@ class VestskTipping(commands.Cog):
         # Skriv ukespoeng i kolonnene
         for pidx, discord_id in enumerate(player_ids):
             col_idx = start_col + pidx
-            cell_obj = await asyncio.to_thread(sheet.cell, uke_total_row, col_idx)
+            cell_obj = await asyncio.to_thread(
+                sheet.cell, uke_total_row, col_idx
+            )
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
                 cell_obj.value = poeng
@@ -601,7 +668,9 @@ class VestskTipping(commands.Cog):
                 forrige_sesong_row = i
 
         # --- Sett inn Sesongpoeng på rad rett under Ukespoeng ---
-        sesong_label_cell = await asyncio.to_thread(sheet.cell, uke_total_row + 1, 1)
+        sesong_label_cell = await asyncio.to_thread(
+            sheet.cell, uke_total_row + 1, 1
+        )
         sesong_label_cell.value = "Sesongpoeng"
         cell_updates.append(sesong_label_cell)
 
@@ -613,7 +682,9 @@ class VestskTipping(commands.Cog):
                 tidligere_total = int(val) if val and str(val).isdigit() else 0
 
             ny_total = tidligere_total + uke_poeng[pidx]
-            cell_obj = await asyncio.to_thread(sheet.cell, uke_total_row + 1, col_idx)
+            cell_obj = await asyncio.to_thread(
+                sheet.cell, uke_total_row + 1, col_idx
+            )
             if str(cell_obj.value) != str(ny_total):
                 cell_obj.value = ny_total
                 cell_updates.append(cell_obj)
@@ -623,7 +694,9 @@ class VestskTipping(commands.Cog):
             try:
                 await asyncio.to_thread(sheet.update_cells, cell_updates)
             except Exception as e:
-                raise ResultaterError(f"Feil ved batch-oppdatering av celler: {e}") from e
+                raise ResultaterError(
+                    f"Feil ved batch-oppdatering av celler: {e}"
+                ) from e
 
         # === Batch formatering med batchUpdate ===
         # Bruk green_format/red_format/yellow_format for batchUpdate.
@@ -647,7 +720,10 @@ class VestskTipping(commands.Cog):
                         "endColumnIndex": col_idx
                     },
                     "cell": {"userEnteredFormat": fmt},
-                    "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat"
+                    "fields": (
+                        "userEnteredFormat.backgroundColor,"
+                        "userEnteredFormat.textFormat"
+                    )
                 }
             })
 
@@ -658,17 +734,27 @@ class VestskTipping(commands.Cog):
                     {"requests": requests}
                 )
             except Exception as e:
-                raise ResultaterError(f"Feil ved batch-formattering av celler: {e}")
+                raise ResultaterError(
+                    f"Feil ved batch-formattering av celler: {e}"
+                )
 
         logger.info("Ferdig med oppdatering av sheet, sender Discord-melding")
 
         # Discord-melding
-        header_row = (await asyncio.to_thread(sheet.row_values, 1))[1:1+num_players]
+        header_row = (
+            await asyncio.to_thread(sheet.row_values, 1)
+        )[1:1+num_players]
         discord_msg = []
         for idx, name in enumerate(header_row, start=2):
             uke_p = uke_poeng[idx-2]
-            sesong_p_cell = (await asyncio.to_thread(sheet.cell, sesong_total_row, idx)).value
-            sesong_p = int(sesong_p_cell) if sesong_p_cell and str(sesong_p_cell).isdigit() else 0
+            sesong_p_cell = (
+                await asyncio.to_thread(sheet.cell, sesong_total_row, idx)
+            ).value
+            sesong_p = (
+                int(sesong_p_cell)
+                if sesong_p_cell and str(sesong_p_cell).isdigit()
+                else 0
+            )
             discord_msg.append((name, uke_p, sesong_p))
 
         discord_msg.sort(key=lambda x: x[1], reverse=True)
@@ -684,7 +770,11 @@ class VestskTipping(commands.Cog):
 
         lines.append("```")
         await ctx.send("\n".join(lines))
-        await ctx.send(f"✅ Resultater for uke {uke if uke else 'nåværende'} er oppdatert.")
+        await ctx.send(
+            f"✅ Resultater for uke {uke if uke else 'nåværende'} er "
+            "oppdatert."
+        )
+
 
 # --- Setup ---
 async def setup(bot):

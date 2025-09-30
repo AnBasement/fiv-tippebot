@@ -2,11 +2,14 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from cogs.responses import Responses
 
+
 @pytest.mark.asyncio
 async def test_all_commands_exist():
     """
-    Kjører alle kommandoene i Responses-cog-en og sjekker at ctx.send blir kalt.
-    Ingen kommando-spesifikke tester trengs, så nye kommandoer testes automatisk.
+    Kjører alle kommandoene i Responses-cog-en og
+    sjekker at ctx.send blir kalt.
+    Ingen kommando-spesifikke tester trengs,
+    så nye kommandoer testes automatisk.
     """
     bot = MagicMock()
     cog = Responses(bot)

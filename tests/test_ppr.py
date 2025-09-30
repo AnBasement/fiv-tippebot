@@ -21,13 +21,14 @@ DUMMY_TEAM_NAMES = {
     "Knut": "Knuts",
 }
 
+
 # --- Fixtures ---
 @pytest.fixture
 @patch("cogs.ppr.get_client")
 def cog(mock_get_client):
     mock_bot = MagicMock()
     mock_sheet = MagicMock()
-    # Sett mock_get_client til å returnere et dummy client som har open() -> mock_sheet
+    # Sett mock_get_client til å returnere dummy client med open()->mock_sheet
     dummy_client = MagicMock()
     dummy_client.open.return_value = mock_sheet
     mock_get_client.return_value = dummy_client
@@ -36,28 +37,37 @@ def cog(mock_get_client):
     ppr_cog = PPR(mock_bot)
     return ppr_cog
 
+
 # --- Tester ---
 @pytest.mark.asyncio
 async def test_get_players_returns_list(monkeypatch, cog):
-    monkeypatch.setattr(cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS))
+    monkeypatch.setattr(
+        cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS)
+        )
     players = cog._get_players()
     assert isinstance(players, list)
     assert all("team" in p and "ppr" in p for p in players)
+
 
 @pytest.mark.asyncio
 async def test_save_snapshot(monkeypatch, cog):
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
     ws_mock = MagicMock()
     ws_mock.col_values.return_value = [""]  # tom kolonne
-    ws_mock.range.return_value = [MagicMock() for _ in range(len(DUMMY_PLAYERS) * 3)]
+    ws_mock.range.return_value = [
+        MagicMock() for _ in range(len(DUMMY_PLAYERS) * 3)
+        ]
     cog.sheet.worksheet.return_value = ws_mock
 
     cog._save_snapshot(DUMMY_PLAYERS)
     ws_mock.update_cells.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_ppr_command_logic(monkeypatch, cog):
-    monkeypatch.setattr(cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS))
+    monkeypatch.setattr(
+        cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS)
+        )
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
     ctx = MagicMock()
     ctx.send = AsyncMock()

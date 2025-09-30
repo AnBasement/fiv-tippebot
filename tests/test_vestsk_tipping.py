@@ -6,13 +6,17 @@ from core.errors import NoEventsFoundError, ExportError
 from datetime import datetime
 import pytz
 
+
 @pytest.fixture(autouse=True)
 def mock_google_credentials(monkeypatch):
     """Mock Google Sheets client så man ikke trenger credentials.json."""
     # Mock get_client slik at ingen creds trengs
     monkeypatch.setattr(sheets, "get_client", lambda: MagicMock())
     # Mock get_sheet slik at alle tester får et dummy sheet
-    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": MagicMock())
+    monkeypatch.setattr(
+        sheets, "get_sheet", lambda name="Vestsk Tipping": MagicMock()
+        )
+
 
 def test_format_event_simple():
     cog = VestskTipping.__new__(VestskTipping)
@@ -25,6 +29,7 @@ def test_format_event_simple():
     }
     formatted = cog._format_event(event)
     assert "TeamB @ TeamA" in formatted
+
 
 @pytest.mark.asyncio
 async def test_export_handles_no_events(monkeypatch):
@@ -69,6 +74,7 @@ async def test_export_handles_no_events(monkeypatch):
     with pytest.raises(ExportError):
         await cog._export_impl(ctx)
 
+
 @pytest.mark.asyncio
 async def test_resultater_handles_api_error(monkeypatch):
     cog = VestskTipping.__new__(VestskTipping)
@@ -83,7 +89,9 @@ async def test_resultater_handles_api_error(monkeypatch):
     sheet = MagicMock()
     sheet.row_values = AsyncMock(return_value=["Header", "Player1", "Player2"])
     sheet.cell = AsyncMock(return_value=MagicMock(value="0"))
-    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
+    monkeypatch.setattr(
+        sheets, "get_sheet", lambda name="Vestsk Tipping": sheet
+        )
 
     try:
         await cog._resultater_impl(ctx)
@@ -92,12 +100,14 @@ async def test_resultater_handles_api_error(monkeypatch):
 
     assert ctx.send.await_count > 0
 
+
 def test_is_valid_game_message_edge_cases():
     cog = VestskTipping.__new__(VestskTipping)
     assert not cog.is_valid_game_message("")
     assert not cog.is_valid_game_message("random text")
     assert not cog.is_valid_game_message("TeamA vs TeamB")
     assert cog.is_valid_game_message("TeamA - TeamB: 24-17") is True
+
 
 @pytest.mark.asyncio
 async def test_logging_on_export(monkeypatch):
@@ -113,7 +123,9 @@ async def test_logging_on_export(monkeypatch):
     ctx.channel = MagicMock()
     ctx.channel.send = AsyncMock()
 
-    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
+    monkeypatch.setattr(
+        sheets, "get_sheet", lambda name="Vestsk Tipping": sheet
+        )
 
     # Mock sheet data
     sheet.col_values.return_value = [""]  # tom første kolonne
@@ -128,7 +140,7 @@ async def test_logging_on_export(monkeypatch):
     bot_user = MagicMock()
     cog.bot.user = bot_user
 
-    # Sett opp melding med nåværende dato, slik at den alltid er etter start_of_week
+    # Sett opp melding med nåværende dato slik at den er etter start_of_week
     oslo_tz = pytz.timezone("Europe/Oslo")
     now = datetime.now(oslo_tz)
     msg = MagicMock(content="Patriots @ Giants")
@@ -148,6 +160,7 @@ async def test_logging_on_export(monkeypatch):
     # Sjekk at melding ble sendt
     ctx.send.assert_awaited_with("Kampdata eksportert til Sheets.")
 
+
 @pytest.mark.asyncio
 async def test_get_players_basic():
     sheet = MagicMock()
@@ -157,12 +170,14 @@ async def test_get_players_basic():
     players = cog.get_players(sheet)
     assert players == {"id1": 1, "id2": 2}
 
+
 def test_get_players_empty():
     sheet = MagicMock()
     sheet.row_values.return_value = ["", "", "", ""]
     cog = VestskTipping.__new__(VestskTipping)
     players = cog.get_players(sheet)
     assert players == {}
+
 
 def test_format_event():
     cog = VestskTipping.__new__(VestskTipping)
@@ -179,10 +194,13 @@ def test_format_event():
     result = cog._format_event(ev)
     assert "Patriots @ Giants" in result or "Giants @ Patriots" in result
 
+
 @pytest.mark.asyncio
 async def test_export_error(monkeypatch):
     # Simuler at get_sheet returnerer None
-    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": None)
+    monkeypatch.setattr(
+        sheets, "get_sheet", lambda name="Vestsk Tipping": None
+        )
     cog = VestskTipping.__new__(VestskTipping)
     cog.bot = MagicMock()
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
@@ -191,28 +209,37 @@ async def test_export_error(monkeypatch):
     with pytest.raises(Exception):
         await cog._export_impl(ctx)
 
+
 @pytest.mark.asyncio
 async def test_resultater_no_events(monkeypatch):
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
     mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
-    monkeypatch.setattr("cogs.sheets.get_sheet", lambda name="Vestsk Tipping": mock_sheet)
+    monkeypatch.setattr(
+        "cogs.sheets.get_sheet", lambda name="Vestsk Tipping": mock_sheet
+        )
     monkeypatch.setattr("cogs.sheets.green_format", lambda: "green")
     monkeypatch.setattr("cogs.sheets.red_format", lambda: "red")
     monkeypatch.setattr("cogs.sheets.yellow_format", lambda: "yellow")
     monkeypatch.setattr("cogs.sheets.format_cell", lambda *a, **kw: None)
+
     class DummyAiohttpResponse:
         async def json(self):
             return {"events": []}
+
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             pass
+
     class DummyAiohttpSession:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             pass
+
         def get(self, url, *args, **kwargs):
             return DummyAiohttpResponse()
     monkeypatch.setattr(
@@ -224,16 +251,19 @@ async def test_resultater_no_events(monkeypatch):
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
     cog.last_reminder_week = None
     cog.last_reminder_sunday = None
+
     class DummyCtx:
         def __init__(self):
             self.sent_messages = []
             self.channel = MagicMock()
             self.author = MagicMock()
+
         async def send(self, msg):
             self.sent_messages.append(msg)
     ctx = DummyCtx()
     with pytest.raises(NoEventsFoundError):
         await cog._resultater_impl(ctx)
+
 
 @pytest.mark.asyncio
 async def test_export_impl_message_filtering(monkeypatch):
@@ -243,13 +273,18 @@ async def test_export_impl_message_filtering(monkeypatch):
     mock_sheet.row_values.return_value = ["", "111", "222"]
     mock_sheet.col_values.return_value = ["Kamp1", "Kamp2"]
     mock_sheet.range.return_value = [MagicMock(), MagicMock(), MagicMock()]
-    mock_sheet.update_cells.side_effect = lambda cells: setattr(mock_sheet, "updated", True)
-    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet)
+    mock_sheet.update_cells.side_effect = lambda cells: setattr(
+        mock_sheet, "updated", True
+        )
+    monkeypatch.setattr(
+        sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet
+        )
 
     # Dummy bot og context
     class DummyUser:
         def __init__(self, id):
             self.id = id
+
         def __eq__(self, other):
             return isinstance(other, DummyUser) and self.id == other.id
 
@@ -257,6 +292,7 @@ async def test_export_impl_message_filtering(monkeypatch):
         def __init__(self, emoji, users):
             self.emoji = emoji
             self._users = users
+
         async def users(self):
             for u in self._users:
                 yield u
@@ -271,6 +307,7 @@ async def test_export_impl_message_filtering(monkeypatch):
     class DummyChannel:
         def __init__(self, messages):
             self._messages = messages
+
         def history(self, limit, after):
             # Simuler async generator
             async def gen():
@@ -282,6 +319,7 @@ async def test_export_impl_message_filtering(monkeypatch):
         def __init__(self):
             self.sent = []
             self.channel = None
+
         async def send(self, msg):
             self.sent.append(msg)
 
@@ -309,15 +347,22 @@ async def test_export_impl_message_filtering(monkeypatch):
     assert hasattr(mock_sheet, "updated")
     assert any("eksportert" in m.lower() for m in ctx.sent)
 
+
 def test_is_valid_game_message():
     # Gyldige meldinger
     assert VestskTipping.is_valid_game_message("Patriots @ Giants")
-    assert VestskTipping.is_valid_game_message("New England Patriots @ New York Giants")
+    assert VestskTipping.is_valid_game_message(
+        "New England Patriots @ New York Giants"
+        )
     assert VestskTipping.is_valid_game_message("Raiders @ 49ers")
 
     # Ugyldige meldinger: mentions
-    assert not VestskTipping.is_valid_game_message("Patriots @ Giants <@123456>")
-    assert not VestskTipping.is_valid_game_message("@everyone Patriots @ Giants")
+    assert not VestskTipping.is_valid_game_message(
+        "Patriots @ Giants <@123456>"
+        )
+    assert not VestskTipping.is_valid_game_message(
+        "@everyone Patriots @ Giants"
+        )
     assert not VestskTipping.is_valid_game_message("@here Patriots @ Giants")
 
     # Ugyldige meldinger: feil format
@@ -326,11 +371,14 @@ def test_is_valid_game_message():
     assert not VestskTipping.is_valid_game_message("")
 
     # Gyldig med emoji (skal fjernes)
-    assert VestskTipping.is_valid_game_message("Patriots @ Giants <:_patriots:123456>")
+    assert VestskTipping.is_valid_game_message(
+        "Patriots @ Giants <:_patriots:123456>"
+        )
+
 
 @pytest.mark.asyncio
 async def test_resultater_no_events_api(monkeypatch):
-    
+
     # Mock get_sheet til å returnere et dummy sheet
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
@@ -346,16 +394,20 @@ async def test_resultater_no_events_api(monkeypatch):
     class DummyAiohttpResponse:
         async def json(self):
             return {"events": []}
+
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             pass
 
     class DummyAiohttpSession:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             pass
+
         def get(self, url, *args, **kwargs):
             return DummyAiohttpResponse()
 
@@ -377,6 +429,7 @@ async def test_resultater_no_events_api(monkeypatch):
             self.sent_messages = []
             self.channel = MagicMock()
             self.author = MagicMock()
+
         async def send(self, msg):
             self.sent_messages.append(msg)
 
@@ -385,6 +438,7 @@ async def test_resultater_no_events_api(monkeypatch):
     # Sjekk at riktig exception kastes
     with pytest.raises(NoEventsFoundError):
         await cog._resultater_impl(ctx)
+
 
 @pytest.mark.asyncio
 async def test_export_impl_simple(monkeypatch):
@@ -395,10 +449,14 @@ async def test_export_impl_simple(monkeypatch):
     # row_values(2) gir to spillere
     mock_sheet.row_values.return_value = ["", "111", "222"]
     mock_sheet.range.return_value = [MagicMock(), MagicMock(), MagicMock()]
-    mock_sheet.update_cells.side_effect = lambda cells: print("[DEBUG] update_cells called")
+    mock_sheet.update_cells.side_effect = lambda cells: print(
+        "[DEBUG] update_cells called"
+        )
 
     # Patch get_sheet
-    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet)
+    monkeypatch.setattr(
+        sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet
+        )
 
     # --- Dummy cog ---
     cog = VestskTipping.__new__(VestskTipping)
@@ -428,11 +486,13 @@ async def test_export_impl_simple(monkeypatch):
     # Sjekk at update_cells ble kalt
     assert mock_sheet.update_cells.called
 
+
 @pytest.mark.asyncio
 async def test_reminder_scheduler_thursday(monkeypatch):
     class DummyChannel:
         def __init__(self):
             self.sent = []
+
         async def send(self, msg):
             self.sent.append(msg)
 
@@ -449,6 +509,7 @@ async def test_reminder_scheduler_thursday(monkeypatch):
     cog.last_reminder_sunday = None
 
     sleep_calls = {"n": 0}
+
     async def fast_sleep(_):
         sleep_calls["n"] += 1
         if sleep_calls["n"] >= 2:
@@ -458,6 +519,7 @@ async def test_reminder_scheduler_thursday(monkeypatch):
     # Sett nåværende tid til torsdag 17:50 lokal tid
     fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 5, 17, 50))  # Torsdag
     from cogs import vestsk_tipping as vt_mod
+
     class FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -470,11 +532,13 @@ async def test_reminder_scheduler_thursday(monkeypatch):
     assert any("RAUÅ I GIR" in m for m in channel.sent)
     assert cog.last_reminder_week == fixed_now.isocalendar()[1]
 
+
 @pytest.mark.asyncio
 async def test_reminder_scheduler_sunday(monkeypatch):
     class DummyChannel:
         def __init__(self):
             self.sent = []
+
         async def send(self, msg):
             self.sent.append(msg)
 
@@ -491,6 +555,7 @@ async def test_reminder_scheduler_sunday(monkeypatch):
     cog.last_reminder_sunday = None
 
     sleep_calls = {"n": 0}
+
     async def fast_sleep(_):
         sleep_calls["n"] += 1
         if sleep_calls["n"] >= 2:
@@ -499,10 +564,12 @@ async def test_reminder_scheduler_sunday(monkeypatch):
 
     fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 8, 17, 55))
     from cogs import vestsk_tipping as vt_mod
+
     class FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
             return fixed_now
+
         @classmethod
         def fromisoformat(cls, s):
             return datetime.fromisoformat(s)
@@ -519,11 +586,17 @@ async def test_reminder_scheduler_sunday(monkeypatch):
                                 "competitors": [
                                     {
                                         "homeAway": "home",
-                                        "team": {"displayName": "New York Giants"}
+                                        "team": {
+                                            "displayName": "New York Giants"
+                                            }
                                     },
                                     {
                                         "homeAway": "away",
-                                        "team": {"displayName": "New England Patriots"}
+                                        "team": {
+                                            "displayName": (
+                                                "New England Patriots"
+                                            )
+                                            }
                                     },
                                 ]
                             }
@@ -531,16 +604,20 @@ async def test_reminder_scheduler_sunday(monkeypatch):
                     }
                 ]
             }
+
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             pass
 
     class DummyAiohttpSession:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             pass
+
         def get(self, url, *args, **kwargs):
             return DummyAiohttpResponse()
 

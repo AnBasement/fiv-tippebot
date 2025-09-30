@@ -17,16 +17,17 @@ import os
 # Sett opp logging
 logger = logging.getLogger(__name__)
 
+
 class PPR(commands.Cog):
     """Cog for håndtering av PPR-statistikk og -kommandoer.
-    
+
     Denne cog-en håndterer innhenting av PPR-verdier fra Google Sheets,
     lagring av historiske data, og posting av rangeringer i Discord.
     """
 
     def __init__(self, bot):
         """Initialiserer PPR cog.
-        
+
         Args:
             bot (commands.Bot): Discord bot-instansen
         """
@@ -40,18 +41,21 @@ class PPR(commands.Cog):
 
     def _get_players(self, season="2025"):
         """Henter PPR-data for alle spillere for gitt sesong.
-        
+
         Går gjennom hvert spillerark og henter ut PPR-verdier for
         spesifisert sesong. Sesong-verdien finnes i kolonne A
         og verdiene må være i kolonne B.
-        
+
         Args:
-            season (str, optional): Sesongen å hente PPR for. Standard er "2025".
-        
+            season (str, optional):
+                Sesongen å hente PPR for. Standard er "2025".
+
         Returns:
-            list[dict]: Liste med dictionaries som inneholder lagnavn og PPR for hver spiller.
+            list[dict]:
+                Liste med dictionaries som inneholder lagnavn og PPR
+                for hver spiller.
                 Format: [{"team": str, "ppr": float}, ...]
-        
+
         Raises:
             PPRFetchError: Hvis PPR-data ikke kan hentes for en spiller.
         """
@@ -60,14 +64,14 @@ class PPR(commands.Cog):
             "Einar", "Torstein", "Peter",
             "Edvard H", "Tor"
         ]
-        
+
         players = []
         logger.info(f"Henter PPR-data for sesong {season}")
 
         for ws in self.sheet.worksheets():
             if ws.title not in target_names:
                 continue
-            
+
             logger.debug(f"Prosesserer ark: {ws.title}")
             try:
                 rows = ws.get_all_values()
@@ -76,10 +80,12 @@ class PPR(commands.Cog):
                     if row[0] == season:
                         target_row = i
                         break
-                        
+
                 if target_row:
                     try:
-                        ppr_value = float(rows[target_row-1][1])  # B = indeks 1
+                        ppr_value = float(
+                            rows[target_row-1][1]
+                        )  # B = indeks 1
                         players.append({"team": ws.title, "ppr": ppr_value})
                         logger.debug(f"PPR for {ws.title}: {ppr_value}")
                     except ValueError as e:
@@ -94,7 +100,7 @@ class PPR(commands.Cog):
                         season,
                         f"Fant ingen rad for sesong {season}"
                     )
-                    
+
             except Exception as e:
                 raise PPRFetchError(
                     ws.title,
@@ -107,15 +113,15 @@ class PPR(commands.Cog):
 
     def _save_snapshot(self, players):
         """Lagrer et snapshot av dagens PPR-verdier.
-        
+
         Oppdaterer arket 'PPR-historikk' med dagens
         PPR-verdier for alle spillere. Inkluderer rangering basert
         på PPR-verdi.
-        
+
         Args:
             players (list[dict]): Liste med spillerdata.
                 Format: [{"team": str, "ppr": float}, ...]
-        
+
         Raises:
             PPRSnapshotError: Hvis snapshot ikke kan lagres.
         """
@@ -124,7 +130,9 @@ class PPR(commands.Cog):
             logger.debug("Fant eksisterende PPR-historikk ark")
         except Exception:
             logger.info("Oppretter nytt PPR-historikk ark")
-            history_ws = self.sheet.add_worksheet(title="PPR-historikk", rows=1000, cols=10)
+            history_ws = self.sheet.add_worksheet(
+                title="PPR-historikk", rows=1000, cols=10
+            )
 
         rows_to_add = []
         for rank, player in enumerate(players, start=1):
@@ -160,10 +168,12 @@ class PPR(commands.Cog):
             )
 
     @commands.command(name="ppr")
-    @commands.check(lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(","))
+    @commands.check(
+        lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(",")
+    )
     async def ppr(self, ctx):
         """Poster oppdatert PPR-rangering i Discord.
-        
+
         Henter dagens PPR-verdier, lagrer et snapshot, og viser
         rangeringen i Discord med endringer siden forrige snapshot.
 
@@ -176,8 +186,10 @@ class PPR(commands.Cog):
         """
         try:
             players = self._get_players()
-            players_sorted = sorted(players, key=lambda x: x["ppr"], reverse=True)
-            
+            players_sorted = sorted(
+                players, key=lambda x: x["ppr"], reverse=True
+            )
+
             # Last historiske verdier
             history_ws = self.sheet.worksheet("PPR-historikk")
             rows = history_ws.get_all_values()
@@ -210,7 +222,9 @@ class PPR(commands.Cog):
             old_rank = last_ranks.get(team)
             player["rank"] = rank
 
-            player["diff"] = player["ppr"] - old_ppr if old_ppr is not None else 0.0
+            player["diff"] = (
+                player["ppr"] - old_ppr if old_ppr is not None else 0.0
+            )
 
             if old_rank is not None:
                 if old_rank == rank:
@@ -240,5 +254,7 @@ class PPR(commands.Cog):
         print("[DEBUG] Snapshot lagret.")
 
 # --- Setup ---
+
+
 async def setup(bot):
     await bot.add_cog(PPR(bot))
