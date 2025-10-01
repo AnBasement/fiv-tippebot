@@ -176,7 +176,9 @@ class VestskTipping(commands.Cog):
         # Send en melding i preik
         kanal = ctx.bot.get_channel(PREIK_KANAL)
         if kanal:
-            await kanal.send(f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
+            await kanal.send(
+                f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!"
+                )
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
