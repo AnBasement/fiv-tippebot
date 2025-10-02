@@ -1,5 +1,5 @@
 """
-Modul som håndterer PPR (points per reception) statistikk og historikk.
+Modul som håndterer PPR-statistikk og -historikk.
 
 Denne modulen gir funksjonalitet for å hente PPR-verdier fra spillernes
 individuelle ark, lagre snapshots av PPR-verdier over tid, og vise
@@ -8,6 +8,7 @@ oppdaterte rangeringer i Discord.
 """
 
 import logging
+from typing import Dict, List, Any
 from discord.ext import commands
 from core.errors import PPRFetchError, PPRSnapshotError
 from cogs.sheets import get_client
@@ -25,7 +26,7 @@ class PPR(commands.Cog):
     lagring av historiske data, og posting av rangeringer i Discord.
     """
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot) -> None:
         """Initialiserer PPR cog.
 
         Args:
@@ -39,7 +40,7 @@ class PPR(commands.Cog):
             logger.error(f"PPR Cog: Kunne ikke koble til Google Sheets: {e}")
             raise
 
-    def _get_players(self, season="2025"):
+    def _get_players(self, season: str = "2025") -> List[Dict[str, Any]]:
         """Henter PPR-data for alle spillere for gitt sesong.
 
         Går gjennom hvert spillerark og henter ut PPR-verdier for
@@ -111,7 +112,7 @@ class PPR(commands.Cog):
         logger.info(f"Hentet PPR-data for {len(players)} spillere")
         return players
 
-    def _save_snapshot(self, players):
+    def _save_snapshot(self, players: List[Dict[str, Any]]) -> None:
         """Lagrer et snapshot av dagens PPR-verdier.
 
         Oppdaterer arket 'PPR-historikk' med dagens
@@ -171,7 +172,7 @@ class PPR(commands.Cog):
     @commands.check(
         lambda ctx: str(ctx.author.id) in os.getenv("ADMIN_IDS", "").split(",")
     )
-    async def ppr(self, ctx):
+    async def ppr(self, ctx: commands.Context) -> None:
         """Poster oppdatert PPR-rangering i Discord.
 
         Henter dagens PPR-verdier, lagrer et snapshot, og viser
@@ -248,7 +249,9 @@ class PPR(commands.Cog):
             print(f"[DEBUG] {line}")
 
         msg = "\n".join(msg_lines)
-        await ctx.send(f"```text\n{msg}\n```")
+        await ctx.send(
+            f"@everyone, ukens PPR-oppdatering:\n```text\n{msg}\n```"
+            )
 
         self._save_snapshot(players_sorted)
         print("[DEBUG] Snapshot lagret.")
@@ -256,5 +259,5 @@ class PPR(commands.Cog):
 # --- Setup ---
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(PPR(bot))
