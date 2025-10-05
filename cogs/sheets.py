@@ -42,7 +42,7 @@ def get_creds() -> ServiceAccountCredentials:
         )
     try:
         return ServiceAccountCredentials.from_json_keyfile_name(
-            "credentials.json", scopes=scope  # type: ignore
+            "credentials.json", scope  # type: ignore
         )
     except Exception as e:
         raise MissingCredentialsError(

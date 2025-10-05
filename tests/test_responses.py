@@ -14,17 +14,17 @@ async def test_all_commands_exist():
     bot = MagicMock()
     cog = Responses(bot)
 
-    # Lag et mock-ctx
+    # Lag et mock-ctx med async support
     ctx = MagicMock()
     ctx.send = AsyncMock()
+    ctx.invoked_with = MagicMock()
+    ctx.command = MagicMock()
 
     # Iterer gjennom alle kommandoene i cog-en
     for command in cog.get_commands():
-        # Kall kommandoens callback med cog og ctx
-        await command.callback(cog, ctx)
-
+        # Kall kommandoen direkte med cog som self
+        await command.callback(cog, ctx)  # type: ignore[arg-type]
         # Sjekk at ctx.send ble kalt minst én gang
         ctx.send.assert_called()
-
         # Reset mock for neste kommando
         ctx.send.reset_mock()
