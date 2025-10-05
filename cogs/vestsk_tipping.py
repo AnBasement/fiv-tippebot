@@ -182,7 +182,7 @@ class VestskTipping(commands.Cog):
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(VESTSK_KANAL)
+        channel = self.bot.get_channel(PREIK_KANAL)
 
         while True:
             now = datetime.now(self.norsk_tz)
@@ -313,7 +313,7 @@ class VestskTipping(commands.Cog):
                 logger.error(
                     f"Feil i reminder_scheduler: {e}. Prøver igjen om 5 min."
                 )
-                await asyncio.sleep(300)  # generell backoff før retry
+                await asyncio.sleep(300)
 
     def _format_event(self, ev):
         if "home" in ev and "away" in ev:
