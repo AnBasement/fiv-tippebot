@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 import pytz
 from discord.ext import commands
+import discord
 from data.channel_ids import PREIK_KANAL
 import logging
 from discord.ext.commands import Bot
@@ -63,6 +64,9 @@ class FantasyReminders(commands.Cog):
         """
         await self.bot.wait_until_ready()
         channel = self.bot.get_channel(PREIK_KANAL)
+        if not isinstance(channel, discord.TextChannel):
+            logger.error(f"Channel {PREIK_KANAL} is not a TextChannel")
+            return
 
         while True:
             now: datetime = datetime.now(self.norsk_tz)

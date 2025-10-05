@@ -150,11 +150,9 @@ class PPR(commands.Cog):
             num_rows = len(rows_to_add)
             num_cols = len(rows_to_add[0])
 
-            cell_range = history_ws.range(
-                start_row, 1,
-                start_row + num_rows - 1,
-                num_cols
-            )
+            end_row = start_row + num_rows - 1
+            range_notation = f"A{start_row}:{chr(64 + num_cols)}{end_row}"
+            cell_range = history_ws.range(range_notation)
             flat_values = [val for row in rows_to_add for val in row]
 
             for cell_obj, val in zip(cell_range, flat_values):
@@ -174,13 +172,10 @@ class PPR(commands.Cog):
     )
     async def ppr(self, ctx: commands.Context) -> None:
         """Poster oppdatert PPR-rangering i Discord.
-
         Henter dagens PPR-verdier, lagrer et snapshot, og viser
         rangeringen i Discord med endringer siden forrige snapshot.
-
         Args:
             ctx (commands.Context): Discord context-objektet
-
         Raises:
             PPRFetchError: Hvis PPR-data ikke kan hentes
             PPRSnapshotError: Hvis lagring av snapshot feiler
@@ -190,17 +185,17 @@ class PPR(commands.Cog):
             players_sorted = sorted(
                 players, key=lambda x: x["ppr"], reverse=True
             )
-
             # Last historiske verdier
-            history_ws = self.sheet.worksheet("PPR-historikk")
-            rows = history_ws.get_all_values()
-            logger.debug(f"Hentet {len(rows)} historiske PPR-verdier")
+            try:
+                history_ws = self.sheet.worksheet("PPR-historikk")
+                rows = history_ws.get_all_values()
+                logger.debug(f"Hentet {len(rows)} historiske PPR-verdier")
+            except Exception as e:
+                print(f"[DEBUG] Kunne ikke åpne PPR-historikk: {e}")
+                rows = []
         except Exception as e:
             logger.error(f"Feil ved henting av PPR-data: {str(e)}")
             raise
-        except Exception as e:
-            print(f"[DEBUG] Kunne ikke åpne PPR-historikk: {e}")
-            rows = []
 
         last_snapshot = {}
         last_ranks = {}
@@ -222,11 +217,9 @@ class PPR(commands.Cog):
             old_ppr = last_snapshot.get(team)
             old_rank = last_ranks.get(team)
             player["rank"] = rank
-
             player["diff"] = (
                 player["ppr"] - old_ppr if old_ppr is not None else 0.0
             )
-
             if old_rank is not None:
                 if old_rank == rank:
                     player["rank_change"] = "="
@@ -251,8 +244,7 @@ class PPR(commands.Cog):
         msg = "\n".join(msg_lines)
         await ctx.send(
             f"@everyone, ukens PPR-oppdatering:\n```text\n{msg}\n```"
-            )
-
+        )
         self._save_snapshot(players_sorted)
         print("[DEBUG] Snapshot lagret.")
 
