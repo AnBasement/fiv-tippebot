@@ -38,7 +38,7 @@ async def test_export_handles_no_events(monkeypatch):
 
     # Sett opp cog med nødvendige attributter
     cog = VestskTipping.__new__(VestskTipping)
-    cog.sheet = sheet
+    cog.sheet = sheet  # type: ignore
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
     cog.bot = MagicMock()
 
@@ -55,8 +55,8 @@ async def test_export_handles_no_events(monkeypatch):
     sheet.col_values.return_value = [""]
     sheet.row_values.return_value = ["", "111"]
 
-    cog.get_current_week = lambda self=None: 1
-    cog.get_players = lambda self=None: ["A"]
+    cog.get_current_week = lambda: 1  # type: ignore
+    cog.get_players = lambda sheet: {"A": 1}  # type: ignore
 
     # Sett opp bot-bruker
     bot_user = MagicMock()
@@ -84,7 +84,7 @@ async def test_resultater_handles_api_error(monkeypatch):
     ctx.send = AsyncMock()
     ctx.channel = MagicMock()
     ctx.channel.send = AsyncMock()
-    cog.get_current_week = lambda self=None: 1
+    cog.get_current_week = lambda: 1  # type: ignore
 
     sheet = MagicMock()
     sheet.row_values = AsyncMock(return_value=["Header", "Player1", "Player2"])
@@ -113,7 +113,7 @@ def test_is_valid_game_message_edge_cases():
 async def test_logging_on_export(monkeypatch):
     sheet = MagicMock()
     cog = VestskTipping.__new__(VestskTipping)
-    cog.sheet = sheet
+    cog.sheet = sheet  # type: ignore
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
     cog.bot = MagicMock()
 
@@ -133,8 +133,9 @@ async def test_logging_on_export(monkeypatch):
     sheet.cell = AsyncMock()
     sheet.get_all_values.return_value = [["A", "old1"]]
 
-    cog.get_current_week = lambda self=None: 1
-    cog.get_players = lambda self=None: {"A": 1}  # mapping id → kolonne
+    cog.get_current_week = lambda: 1  # type: ignore
+    # mapping id → kolonne
+    cog.get_players = lambda sheet: {"A": 1}  # type: ignore
 
     # Sett opp bot user
     bot_user = MagicMock()
@@ -320,6 +321,9 @@ async def test_export_impl_message_filtering(monkeypatch):
             self.sent = []
             self.channel = None
 
+        def set_channel(self, channel):
+            self.channel = channel
+
         async def send(self, msg):
             self.sent.append(msg)
 
@@ -339,7 +343,7 @@ async def test_export_impl_message_filtering(monkeypatch):
     cog.last_reminder_sunday = None
 
     ctx = DummyCtx()
-    ctx.channel = channel
+    ctx.set_channel(channel)
 
     await cog._export_impl(ctx)
 
@@ -471,10 +475,10 @@ async def test_export_impl_simple(monkeypatch):
     # --- Dummy _export_impl ---
     # Vi kaller kun metoder internt som bruker sheet
     async def dummy_export_impl(self, ctx):
-        sheet = sheets.get_sheet()
+        sheet = sheets.get_sheet("Vestsk Tipping")
         players = self.get_players(sheet)
         assert players  # sjekk at spillere finnes
-        cells = sheet.range(1, 1, 1, len(players) + 1)
+        cells = sheet.range(f"A1:{chr(65 + len(players))}1")
         sheet.update_cells(cells)
         await ctx.send("Kampdata eksportert (dummy)")
 

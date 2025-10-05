@@ -16,5 +16,5 @@ async def test_ping_command():
             self.sent = msg
 
     ctx = DummyCtx()
-    await cog._ping_impl(ctx)
+    await cog._ping_impl(ctx)  # type: ignore[arg-type]
     assert ctx.sent == "Pong! ✅"
