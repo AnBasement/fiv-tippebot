@@ -22,11 +22,16 @@ def setup_global_cooldown(bot, rate=1, per=5):
     @bot.check
     async def global_cooldown(ctx: commands.Context):
         bucket = cooldown.get_bucket(ctx.message)
+        if bucket is None:
+            return True
         retry_after = bucket.update_rate_limit()
         if retry_after:
+            cooldown_obj = cooldown._cooldown
+            if cooldown_obj is None:
+                return True
             raise commands.CommandOnCooldown(
-                bucket, retry_after, commands.BucketType.user
-                )
+                cooldown_obj, retry_after, commands.BucketType.user
+            )
         return True
 
     @bot.event

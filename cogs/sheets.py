@@ -42,7 +42,7 @@ def get_creds() -> ServiceAccountCredentials:
         )
     try:
         return ServiceAccountCredentials.from_json_keyfile_name(
-            "credentials.json", scope
+            "credentials.json", scopes=scope  # type: ignore
         )
     except Exception as e:
         raise MissingCredentialsError(
@@ -125,7 +125,7 @@ def format_cell(
         )
 
 
-def green_format() -> Dict[str, Dict[str, float]]:
+def green_format() -> Dict[str, Any]:
     """Genererer formateringsinstrukser for grønne celler.
 
     Returns:
@@ -140,7 +140,7 @@ def green_format() -> Dict[str, Dict[str, float]]:
     }
 
 
-def red_format() -> Dict[str, Dict[str, float]]:
+def red_format() -> Dict[str, Any]:
     """Genererer formateringsinstrukser for røde celler.
 
     Returns:
@@ -155,7 +155,7 @@ def red_format() -> Dict[str, Dict[str, float]]:
     }
 
 
-def yellow_format() -> Dict[str, Dict[str, float]]:
+def yellow_format() -> Dict[str, Any]:
     """Genererer formateringsinstrukser for gule celler.
 
     Returns:

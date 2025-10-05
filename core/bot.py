@@ -58,7 +58,7 @@ async def on_command_error(ctx, error):
 
     # Send til admin-kanal
     admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
-    if admin_channel:
+    if admin_channel and isinstance(admin_channel, discord.TextChannel):
         await admin_channel.send(error_msg)
 
     # Logg i terminal
@@ -77,6 +77,9 @@ async def main():
                 print(f"[COG] Lastet {cog}")
             except Exception as e:
                 print(f"[COG] FEIL ved lasting av {cog}: {e}")
+
+        if TOKEN is None:
+            raise ValueError("TOKEN ikke definert i miljøvariabler")
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
