@@ -12,6 +12,7 @@ inkludert:
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
 import aiohttp
+from aiohttp import ClientTimeout
 from datetime import datetime, timedelta
 import pytz
 import re
@@ -134,10 +135,10 @@ class VestskTipping(commands.Cog):
     # === kamper ===
     @commands.command()
     @admin_only()
-    async def kamper(self, ctx, uke: int = None):
+    async def kamper(self, ctx, uke: int | None = None):
         await self._kamper_impl(ctx, uke)
 
-    async def _kamper_impl(self, ctx, uke: int = None):
+    async def _kamper_impl(self, ctx, uke: int | None = None):
         now = datetime.now()
         season = now.year if now.month >= 3 else now.year - 1
         base_url = (
@@ -231,7 +232,9 @@ class VestskTipping(commands.Cog):
 
                     try:
                         async with aiohttp.ClientSession() as session:
-                            async with session.get(url, timeout=10) as resp:
+                            async with session.get(
+                                url, timeout=ClientTimeout(total=10)
+                            ) as resp:
                                 data = await resp.json()
                     except Exception as e:
                         logger.error(
@@ -334,10 +337,10 @@ class VestskTipping(commands.Cog):
     # === eksport ===
     @commands.command(name="eksporter")
     @admin_only()
-    async def export(self, ctx, uke: int = None):
+    async def export(self, ctx, uke: int | None = None):
         await self._export_impl(ctx, uke)
 
-    async def _export_impl(self, ctx, uke: int = None):
+    async def _export_impl(self, ctx, uke: int | None = None):
         sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
         channel = ctx.channel
 
@@ -430,13 +433,13 @@ class VestskTipping(commands.Cog):
 
         if values:
             try:
+                end_row = start_row + len(values) - 1
+                end_col = 1 + num_players
+                range_notation = f"A{start_row}:{chr(64 + end_col)}{end_row}"
                 cell_range = await asyncio.to_thread(
                     sheet.range,
-                    start_row,
-                    1,
-                    start_row + len(values) - 1,
-                    1 + num_players,
-                )
+                    range_notation
+                    )
                 flat_values = [cell for row in values for cell in row]
                 for cell_obj, val in zip(cell_range, flat_values):
                     cell_obj.value = val
@@ -453,12 +456,12 @@ class VestskTipping(commands.Cog):
     # === resultater ===
     @commands.command(name="resultater")
     @admin_only()
-    async def resultater(self, ctx, uke: int = None):
+    async def resultater(self, ctx, uke: int | None = None):
         """Kommando for å vise resultater for en uke."""
         logger.info(f"Kommando !resultater kjørt for uke={uke}")
         await self._resultater_impl(ctx, uke)
 
-    async def _resultater_impl(self, ctx, uke: int = None):
+    async def _resultater_impl(self, ctx, uke: int | None = None):
         try:
             sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
             if not sheet:
@@ -568,13 +571,12 @@ class VestskTipping(commands.Cog):
         end_row = max(row_mapping.values(), default=3)
 
         # Hent alle celler for kampdata i én batch
-        kamp_cell_range = await asyncio.to_thread(
-            sheet.range,
-            start_row,
-            start_col,
-            end_row,
-            end_col
+        range_notation = (
+            f"{chr(64 + start_col)}{start_row}:"
+            f"{chr(64 + end_col)}{end_row}"
         )
+        kamp_cell_range = await asyncio.to_thread(sheet.range, range_notation)
+
         # Lag mapping: (row_idx, col_idx) -> cell_obj
         cell_map = {(cell.row, cell.col): cell for cell in kamp_cell_range}
 
@@ -608,7 +610,8 @@ class VestskTipping(commands.Cog):
                     else [
                         v["short"]
                         for v in teams.values()
-                        if v["short"].lower() == riktig_vinner.lower()
+                        if (riktig_vinner and
+                            v["short"].lower() == riktig_vinner.lower())
                     ]
                 )
 
@@ -643,7 +646,7 @@ class VestskTipping(commands.Cog):
             )
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
-                cell_obj.value = poeng
+                cell_obj.value = str(poeng)
                 cell_updates.append(cell_obj)
 
         # --- Sett inn Ukespoeng på ny rad etter denne ukens kamper ---
@@ -659,7 +662,7 @@ class VestskTipping(commands.Cog):
             )
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
-                cell_obj.value = poeng
+                cell_obj.value = str(poeng)
                 cell_updates.append(cell_obj)
 
         # --- Finn siste Sesongpoeng-rad for å hente forrige totalsum ---
@@ -688,7 +691,7 @@ class VestskTipping(commands.Cog):
                 sheet.cell, uke_total_row + 1, col_idx
             )
             if str(cell_obj.value) != str(ny_total):
-                cell_obj.value = ny_total
+                cell_obj.value = str(ny_total)
                 cell_updates.append(cell_obj)
 
         # === Batch update alle celler ===

@@ -19,7 +19,9 @@ class BotError(Exception):
 
 class PPRFetchError(BotError):
     """Raised når botten ikke klarer å hente PPR."""
-    def __init__(self, team_name: str, season: str, message: str = None):
+    def __init__(
+            self, team_name: str, season: str, message: str | None = None
+            ):
         self.team_name = team_name
         self.season = season
         self.message = message or (
@@ -31,14 +33,14 @@ class PPRFetchError(BotError):
 
 class PPRSnapshotError(BotError):
     """Raised når botten ikke klarer å lagre et PPR snapshot."""
-    def __init__(self, message: str = None):
+    def __init__(self, message: str | None = None):
         self.message = message or "Klarte ikke lagre snapshot av PPR"
         super().__init__(self.message)
 
 
 class ResponseError(BotError):
     """Raised når en responses-kommando feiler."""
-    def __init__(self, command_name: str, message: str = None):
+    def __init__(self, command_name: str, message: str | None = None):
         self.command_name = command_name
         self.message = message or (
             f"Noe gikk galt i responses-kommandoen '{command_name}'"
@@ -61,7 +63,7 @@ class MissingCredentialsError(SheetsError):
 
 class ClientAuthorizationError(SheetsError):
     """Raised når gspread ikke kan autorisere klient."""
-    def __init__(self, message: str = None):
+    def __init__(self, message: str | None = None):
         self.message = message or (
             "Kunne ikke autorisere Google Sheets-klienten"
         )
@@ -74,7 +76,7 @@ class SheetNotFoundError(SheetsError):
         self,
         sheet_name: str,
         worksheet_index: int = 0,
-        message: str = None
+        message: str | None = None
     ):
         self.sheet_name = sheet_name
         self.worksheet_index = worksheet_index
@@ -91,7 +93,7 @@ class VestskError(BotError):
 
 class APIFetchError(VestskError):
     """Raised når ESPNs API ikke kan hentes."""
-    def __init__(self, url: str, original_exception: Exception = None):
+    def __init__(self, url: str, original_exception: Exception | None = None):
         self.url = url
         self.original_exception = original_exception
         self.message = f"Kunne ikke hente data fra ESPN API: {url}"
@@ -102,7 +104,7 @@ class APIFetchError(VestskError):
 
 class NoEventsFoundError(VestskError):
     """Raised når ingen kamper/events finnes for gitt uke."""
-    def __init__(self, week: int = None):
+    def __init__(self, week: int | None = None):
         self.week = week
         self.message = (
             f"Ingen kamper funnet for uke {week}"
@@ -113,14 +115,14 @@ class NoEventsFoundError(VestskError):
 
 class ExportError(VestskError):
     """Raised ved feil under eksport til Sheets."""
-    def __init__(self, message: str = None):
+    def __init__(self, message: str | None = None):
         self.message = message or "Feil under eksport av kampdata til Sheets"
         super().__init__(self.message)
 
 
 class ResultaterError(VestskError):
     """Raised ved feil under oppdatering av resultater i Sheets."""
-    def __init__(self, message: str = None):
+    def __init__(self, message: str | None = None):
         self.message = message or (
             "Feil under oppdatering av resultater i Sheets"
         )
@@ -129,6 +131,6 @@ class ResultaterError(VestskError):
 
 class ReminderError(VestskError):
     """Raised når påminnelse feiler."""
-    def __init__(self, message: str = None):
+    def __init__(self, message: str | None = None):
         self.message = message or "Feil i reminder-task"
         super().__init__(self.message)
