@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml/badge.svg)](https://github.com/AnBasement/fiv-tippebot/actions/workflows/main.yml) [![codecov](https://codecov.io/gh/AnBasement/fiv-tippebot/branch/main/graph/badge.svg?token=NRAJ4ITBQ0)](https://codecov.io/gh/AnBasement/fiv-tippebot)
 
-Discord-bot for bruk på en privat server for NFL Fantasyligaen Fest i Vest. Utviklet som et prosjekt for å lære Python.
+Discord-bot for bruk på en privat server for NFL Fantasyligaen Fest i Vest. Utviklet som et prosjekt for å lære Python, med bruk av AI som assistent.
 
 ## Funksjoner
 
