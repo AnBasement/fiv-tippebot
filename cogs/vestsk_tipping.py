@@ -131,6 +131,7 @@ class VestskTipping(commands.Cog):
                 "Kanskje hvis du spør veldig pent så kan du få lov te å "
                 "bruke botten."
             )
+            return
 
     # === kamper ===
     @commands.command()
