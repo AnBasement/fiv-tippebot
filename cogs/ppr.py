@@ -8,6 +8,7 @@ oppdaterte rangeringer i Discord.
 """
 
 import logging
+import asyncio
 from typing import Dict, List, Any
 from discord.ext import commands
 from core.errors import PPRFetchError, PPRSnapshotError
@@ -40,7 +41,7 @@ class PPR(commands.Cog):
             logger.error(f"PPR Cog: Kunne ikke koble til Google Sheets: {e}")
             raise
 
-    def _get_players(self, season: str = "2025") -> List[Dict[str, Any]]:
+    async def _get_players(self, season: str = "2025") -> List[Dict[str, Any]]:
         """Henter PPR-data for alle spillere for gitt sesong.
 
         Går gjennom hvert spillerark og henter ut PPR-verdier for
@@ -75,7 +76,10 @@ class PPR(commands.Cog):
 
             logger.debug(f"Prosesserer ark: {ws.title}")
             try:
-                rows = ws.get_all_values()
+                rows = await asyncio.wait_for(
+                    asyncio.to_thread(ws.get_all_values),
+                    timeout=10
+                )
                 target_row = None
                 for i, row in enumerate(rows, start=1):
                     if row[0] == season:
@@ -112,7 +116,7 @@ class PPR(commands.Cog):
         logger.info(f"Hentet PPR-data for {len(players)} spillere")
         return players
 
-    def _save_snapshot(self, players: List[Dict[str, Any]]) -> None:
+    async def _save_snapshot(self, players: List[Dict[str, Any]]) -> None:
         """Lagrer et snapshot av dagens PPR-verdier.
 
         Oppdaterer arket 'PPR-historikk' med dagens
@@ -145,20 +149,29 @@ class PPR(commands.Cog):
             return
 
         try:
-            all_rows_colA = history_ws.col_values(1)
+            all_rows_colA = await asyncio.wait_for(
+                asyncio.to_thread(history_ws.col_values, 1),
+                timeout=10
+            )
             start_row = len(all_rows_colA) + 1
             num_rows = len(rows_to_add)
             num_cols = len(rows_to_add[0])
 
             end_row = start_row + num_rows - 1
             range_notation = f"A{start_row}:{chr(64 + num_cols)}{end_row}"
-            cell_range = history_ws.range(range_notation)
+            cell_range = await asyncio.wait_for(
+                asyncio.to_thread(history_ws.range, range_notation),
+                timeout=10
+            )
             flat_values = [val for row in rows_to_add for val in row]
 
             for cell_obj, val in zip(cell_range, flat_values):
                 cell_obj.value = val
 
-            history_ws.update_cells(cell_range)
+            await asyncio.wait_for(
+                asyncio.to_thread(history_ws.update_cells, cell_range),
+                timeout=10
+            )
             logger.info(f"Lagret snapshot med {num_rows} PPR-verdier")
 
         except Exception as e:
@@ -181,14 +194,17 @@ class PPR(commands.Cog):
             PPRSnapshotError: Hvis lagring av snapshot feiler
         """
         try:
-            players = self._get_players()
+            players = await self._get_players()
             players_sorted = sorted(
                 players, key=lambda x: x["ppr"], reverse=True
             )
             # Last historiske verdier
             try:
                 history_ws = self.sheet.worksheet("PPR-historikk")
-                rows = history_ws.get_all_values()
+                rows = await asyncio.wait_for(
+                    asyncio.to_thread(history_ws.get_all_values),
+                    timeout=10
+                )
                 logger.debug(f"Hentet {len(rows)} historiske PPR-verdier")
             except Exception as e:
                 print(f"[DEBUG] Kunne ikke åpne PPR-historikk: {e}")
@@ -245,7 +261,7 @@ class PPR(commands.Cog):
         await ctx.send(
             f"@everyone, ukens PPR-oppdatering:\n```text\n{msg}\n```"
         )
-        self._save_snapshot(players_sorted)
+        await self._save_snapshot(players_sorted)
         print("[DEBUG] Snapshot lagret.")
 
 # --- Setup ---

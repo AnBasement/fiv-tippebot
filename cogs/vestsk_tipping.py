@@ -152,8 +152,17 @@ class VestskTipping(commands.Cog):
             url = base_url
         try:
             async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
-                async with session.get(url) as resp:
-                    data = await resp.json()
+                try:
+                    async with session.get(url) as resp:
+                        data = await resp.json()
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s",
+                        url
+                    )
+                    await asyncio.sleep(5)
+                    async with session.get(url) as resp:
+                        data = await resp.json()
         except Exception as e:
             raise APIFetchError(url, e) from e
 
@@ -233,8 +242,17 @@ class VestskTipping(commands.Cog):
 
                     try:
                         async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
-                            async with session.get(url) as resp:
-                                data = await resp.json()
+                            try:
+                                async with session.get(url) as resp:
+                                    data = await resp.json()
+                            except asyncio.TimeoutError:
+                                logger.warning(
+                                    "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s",
+                                    url
+                                )
+                                await asyncio.sleep(5)
+                                async with session.get(url) as resp:
+                                    data = await resp.json()
                     except Exception as e:
                         logger.error(
                             f"Kunne ikke hente data fra ESPN API: {e}. "
@@ -340,7 +358,16 @@ class VestskTipping(commands.Cog):
         await self._export_impl(ctx, uke)
 
     async def _export_impl(self, ctx, uke: int | None = None):
-        sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
+        try:
+            sheet = await asyncio.wait_for(
+                asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
         channel = ctx.channel
 
         players = self.get_players(sheet)
@@ -426,7 +453,16 @@ class VestskTipping(commands.Cog):
                             )
             values.append(row)
 
-        all_rows_colA = await asyncio.to_thread(sheet.col_values, 1)
+        try:
+            all_rows_colA = await asyncio.wait_for(
+                asyncio.to_thread(sheet.col_values, 1), timeout=10
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
         last_data_row = len(all_rows_colA)
         start_row = last_data_row + 2
 
@@ -435,14 +471,31 @@ class VestskTipping(commands.Cog):
                 end_row = start_row + len(values) - 1
                 end_col = 1 + num_players
                 range_notation = f"A{start_row}:{chr(64 + end_col)}{end_row}"
-                cell_range = await asyncio.to_thread(
-                    sheet.range,
-                    range_notation
+                try:
+                    cell_range = await asyncio.wait_for(asyncio.to_thread(
+                        sheet.range,
+                        range_notation
+                        ), timeout=10
                     )
+                except asyncio.TimeoutError:
+                    logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                    return
+                except Exception as e:
+                    logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                    return
                 flat_values = [cell for row in values for cell in row]
                 for cell_obj, val in zip(cell_range, flat_values):
                     cell_obj.value = val
-                await asyncio.to_thread(sheet.update_cells, cell_range)
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(sheet.update_cells, cell_range), timeout=10
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                    return
+                except Exception as e:
+                    logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                    return
             except Exception as e:
                 raise ExportError(
                     f"Feil ved eksport til sheet '{sheet.title}': {e}"
@@ -462,11 +515,18 @@ class VestskTipping(commands.Cog):
 
     async def _resultater_impl(self, ctx, uke: int | None = None):
         try:
-            sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
+            sheet = await asyncio.wait_for(
+                asyncio.to_thread(get_sheet, "Vestsk Tipping"),
+                timeout=10
+            )
             if not sheet:
                 raise ResultaterError(
                     "Kunne ikke hente worksheet 'Vestsk Tipping'"
                 )
+        except asyncio.TimeoutError:
+            raise ResultaterError(
+                "Timeout ved åpning av sheet 'Vestsk Tipping'"
+            )
         except Exception as e:
             raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
 
@@ -487,8 +547,18 @@ class VestskTipping(commands.Cog):
 
         try:
             async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
-                async with session.get(url) as resp:
-                    data = await resp.json()
+                try:
+                    async with session.get(url) as resp:
+                        data = await resp.json()
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s",
+                        url
+                    )
+                    await asyncio.sleep(5)
+                    # Retry once
+                    async with session.get(url) as resp:
+                        data = await resp.json()
         except Exception as e:
             raise APIFetchError(url, e)
 
@@ -535,7 +605,18 @@ class VestskTipping(commands.Cog):
         num_players = len(players)
 
         # Hent alle relevante rader og kolonner i én batch
-        sheet_rows = (await asyncio.to_thread(sheet.get_all_values))[2:]
+        try:
+            all_rows = await asyncio.wait_for(
+                asyncio.to_thread(sheet.get_all_values),
+                timeout=10
+            )
+            sheet_rows = all_rows[2:]
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
         sheet_kamper = []
         row_mapping = {}
         gyldige_kampkoder = set(kamp_resultater.keys())
@@ -574,7 +655,16 @@ class VestskTipping(commands.Cog):
             f"{chr(64 + start_col)}{start_row}:"
             f"{chr(64 + end_col)}{end_row}"
         )
-        kamp_cell_range = await asyncio.to_thread(sheet.range, range_notation)
+        try:
+            kamp_cell_range = await asyncio.wait_for(
+                asyncio.to_thread(sheet.range, range_notation), timeout=10
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
 
         # Lag mapping: (row_idx, col_idx) -> cell_obj
         cell_map = {(cell.row, cell.col): cell for cell in kamp_cell_range}
@@ -633,34 +723,69 @@ class VestskTipping(commands.Cog):
 
         # --- Sett inn Ukespoeng på ny rad etter denne ukens kamper ---
         # Skriv "Ukespoeng" i kolA
-        uke_label_cell = await asyncio.to_thread(sheet.cell, uke_total_row, 1)
-        uke_label_cell.value = "Ukespoeng"
-        cell_updates.append(uke_label_cell)
+        try:
+            uke_label_cell = await asyncio.wait_for(
+                asyncio.to_thread(sheet.cell, uke_total_row, 1),
+                timeout=10
+            )
+            uke_label_cell.value = "Ukespoeng"
+            cell_updates.append(uke_label_cell)
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
 
         # Skriv ukespoeng i kolonnene
         for pidx, discord_id in enumerate(player_ids):
             col_idx = start_col + pidx
-            cell_obj = await asyncio.to_thread(
-                sheet.cell, uke_total_row, col_idx
-            )
+            try:
+                cell_obj = await asyncio.wait_for(
+                    asyncio.to_thread(sheet.cell, uke_total_row, col_idx),
+                    timeout=10
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                return
+            except Exception as e:
+                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                return
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
                 cell_obj.value = str(poeng)
                 cell_updates.append(cell_obj)
 
         # --- Finn siste Sesongpoeng-rad for å hente forrige totalsum ---
-        all_sheet_rows = await asyncio.to_thread(sheet.get_all_values)
+        try:
+            all_sheet_rows = await asyncio.wait_for(
+                asyncio.to_thread(sheet.get_all_values), timeout=10
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
         forrige_sesong_row = None
         for i, row in enumerate(all_sheet_rows, start=1):
             if row and row[0].strip() == "Sesongpoeng":
                 forrige_sesong_row = i
 
         # --- Sett inn Sesongpoeng på rad rett under Ukespoeng ---
-        sesong_label_cell = await asyncio.to_thread(
-            sheet.cell, uke_total_row + 1, 1
-        )
-        sesong_label_cell.value = "Sesongpoeng"
-        cell_updates.append(sesong_label_cell)
+        try:
+            sesong_label_cell = await asyncio.wait_for(
+                asyncio.to_thread(sheet.cell, uke_total_row + 1, 1),
+                timeout=10
+            )
+            sesong_label_cell.value = "Sesongpoeng"
+            cell_updates.append(sesong_label_cell)
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
 
         for pidx, discord_id in enumerate(player_ids):
             col_idx = start_col + pidx
@@ -670,9 +795,17 @@ class VestskTipping(commands.Cog):
                 tidligere_total = int(val) if val and str(val).isdigit() else 0
 
             ny_total = tidligere_total + uke_poeng[pidx]
-            cell_obj = await asyncio.to_thread(
-                sheet.cell, uke_total_row + 1, col_idx
-            )
+            try:
+                cell_obj = await asyncio.wait_for(
+                    asyncio.to_thread(sheet.cell, uke_total_row + 1, col_idx),
+                    timeout=10
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                return
+            except Exception as e:
+                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                return
             if str(cell_obj.value) != str(ny_total):
                 cell_obj.value = str(ny_total)
                 cell_updates.append(cell_obj)
@@ -680,7 +813,15 @@ class VestskTipping(commands.Cog):
         # === Batch update alle celler ===
         if cell_updates:
             try:
-                await asyncio.to_thread(sheet.update_cells, cell_updates)
+                await asyncio.wait_for(
+                    asyncio.to_thread(sheet.update_cells, cell_updates), timeout=10
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                return
+            except Exception as e:
+                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                return
             except Exception as e:
                 raise ResultaterError(
                     f"Feil ved batch-oppdatering av celler: {e}"
@@ -717,9 +858,12 @@ class VestskTipping(commands.Cog):
 
         if requests:
             try:
-                await asyncio.to_thread(
-                    sheet.spreadsheet.batch_update,
-                    {"requests": requests}
+                await asyncio.wait_for(
+                    asyncio.to_thread(
+                        sheet.spreadsheet.batch_update,
+                        {"requests": requests}
+                    ),
+                    timeout=10
                 )
             except Exception as e:
                 raise ResultaterError(
@@ -729,15 +873,34 @@ class VestskTipping(commands.Cog):
         logger.info("Ferdig med oppdatering av sheet, sender Discord-melding")
 
         # Discord-melding
-        header_row = (
-            await asyncio.to_thread(sheet.row_values, 1)
-        )[1:1+num_players]
+        try:
+            header_row = await asyncio.wait_for(
+                asyncio.to_thread(sheet.row_values, 1),
+                timeout=10
+            )
+            header_row = header_row[1:1+num_players]
+        except asyncio.TimeoutError:
+            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            return
+        except Exception as e:
+            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            return
+        
         discord_msg = []
         for idx, name in enumerate(header_row, start=2):
             uke_p = uke_poeng[idx-2]
-            sesong_p_cell = (
-                await asyncio.to_thread(sheet.cell, sesong_total_row, idx)
-            ).value
+            try:
+                sesong_cell = await asyncio.wait_for(
+                    asyncio.to_thread(sheet.cell, sesong_total_row, idx),
+                    timeout=10
+                )
+                sesong_p_cell = sesong_cell.value
+            except asyncio.TimeoutError:
+                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                return
+            except Exception as e:
+                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                return
             sesong_p = (
                 int(sesong_p_cell)
                 if sesong_p_cell and str(sesong_p_cell).isdigit()

@@ -42,9 +42,9 @@ def cog(mock_get_client):
 @pytest.mark.asyncio
 async def test_get_players_returns_list(monkeypatch, cog):
     monkeypatch.setattr(
-        cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS)
+        cog, "_get_players", AsyncMock(return_value=DUMMY_PLAYERS)
         )
-    players = cog._get_players()
+    players = await cog._get_players()
     assert isinstance(players, list)
     assert all("team" in p and "ppr" in p for p in players)
 
@@ -59,14 +59,14 @@ async def test_save_snapshot(monkeypatch, cog):
         ]
     cog.sheet.worksheet.return_value = ws_mock
 
-    cog._save_snapshot(DUMMY_PLAYERS)
+    await cog._save_snapshot(DUMMY_PLAYERS)
     ws_mock.update_cells.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_ppr_command_logic(monkeypatch, cog):
     monkeypatch.setattr(
-        cog, "_get_players", MagicMock(return_value=DUMMY_PLAYERS)
+        cog, "_get_players", AsyncMock(return_value=DUMMY_PLAYERS)
         )
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
     ctx = MagicMock()
