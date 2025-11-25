@@ -151,7 +151,7 @@ class VestskTipping(commands.Cog):
         else:
             url = base_url
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
         except Exception as e:
@@ -232,10 +232,8 @@ class VestskTipping(commands.Cog):
                     )
 
                     try:
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(
-                                url, timeout=ClientTimeout(total=10)
-                            ) as resp:
+                        async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
+                            async with session.get(url) as resp:
                                 data = await resp.json()
                     except Exception as e:
                         logger.error(
@@ -488,7 +486,7 @@ class VestskTipping(commands.Cog):
         logger.debug(f"Henter URL: {url}")
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
         except Exception as e:
