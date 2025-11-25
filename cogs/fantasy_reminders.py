@@ -63,10 +63,14 @@ class FantasyReminders(commands.Cog):
                     >>> bot.add_cog(fantasy_cog)
         """
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(PREIK_KANAL)
-        if not isinstance(channel, discord.TextChannel):
-            logger.error(f"Channel {PREIK_KANAL} is not a TextChannel")
-            return
+        channel: discord.TextChannel | None = None
+        while not isinstance(channel, discord.TextChannel):
+            channel = self.bot.get_channel(PREIK_KANAL)
+            if not isinstance(channel, discord.TextChannel):
+                logger.warning(
+                    f"Fant ikke tekstkanal med id {PREIK_KANAL}, prøver igjen om 30s"
+                )
+                await asyncio.sleep(30)
 
         while True:
             now: datetime = datetime.now(self.norsk_tz)
