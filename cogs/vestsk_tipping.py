@@ -90,12 +90,12 @@ class VestskTipping(commands.Cog):
             >>> is_valid_game_message("@everyone Patriots vs Bills")
             False
         """
-        clean_text = re.sub(r'<:.+?:\d+>', '', msg_content).strip()
-        if re.search(r'<@|@everyone|@here', clean_text):
+        clean_text = re.sub(r"<:.+?:\d+>", "", msg_content).strip()
+        if re.search(r"<@|@everyone|@here", clean_text):
             return False
         return bool(
-            re.match(r'^[A-Za-z0-9 .]+ @ [A-Za-z0-9 .]+$', clean_text) or
-            re.match(r'^[A-Za-z0-9 .]+ - [A-Za-z0-9 .]+: \d+-\d+$', clean_text)
+            re.match(r"^[A-Za-z0-9 .]+ @ [A-Za-z0-9 .]+$", clean_text)
+            or re.match(r"^[A-Za-z0-9 .]+ - [A-Za-z0-9 .]+: \d+-\d+$", clean_text)
         )
 
     def __init__(self, bot):
@@ -143,22 +143,22 @@ class VestskTipping(commands.Cog):
         now = datetime.now()
         season = now.year if now.month >= 3 else now.year - 1
         base_url = (
-            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/"
-            "scoreboard"
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/" "scoreboard"
         )
         if uke:
             url = f"{base_url}?dates={season}&seasontype=2&week={uke}"
         else:
             url = base_url
         try:
-            async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
+            async with aiohttp.ClientSession(
+                timeout=ClientTimeout(total=10)
+            ) as session:
                 try:
                     async with session.get(url) as resp:
                         data = await resp.json()
                 except asyncio.TimeoutError:
                     logger.warning(
-                        "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s",
-                        url
+                        "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s", url
                     )
                     await asyncio.sleep(5)
                     async with session.get(url) as resp:
@@ -178,18 +178,14 @@ class VestskTipping(commands.Cog):
             away = next(c for c in comps if c["homeAway"] == "away")
             home_team = home["team"]["displayName"]
             away_team = away["team"]["displayName"]
-            away_emoji = teams.get(away_team, {'emoji': ''})['emoji']
-            home_emoji = teams.get(home_team, {'emoji': ''})['emoji']
-            await ctx.send(
-                f"{away_emoji} {away_team} @ {home_team} {home_emoji}"
-            )
+            away_emoji = teams.get(away_team, {"emoji": ""})["emoji"]
+            home_emoji = teams.get(home_team, {"emoji": ""})["emoji"]
+            await ctx.send(f"{away_emoji} {away_team} @ {home_team} {home_emoji}")
 
         # Send en melding i preik
         kanal = ctx.bot.get_channel(PREIK_KANAL)
         if kanal:
-            await kanal.send(
-                f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!"
-                )
+            await kanal.send(f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
 
     async def reminder_scheduler(self):
         await self.bot.wait_until_ready()
@@ -210,8 +206,10 @@ class VestskTipping(commands.Cog):
                         sleep_seconds = (reminder_time - now).total_seconds()
                         await asyncio.sleep(sleep_seconds)
 
-                        if (self.last_reminder_week is None or
-                                self.last_reminder_week != week_num):
+                        if (
+                            self.last_reminder_week is None
+                            or self.last_reminder_week != week_num
+                        ):
                             await channel.send(
                                 (
                                     "@everyone RAUÅ I GIR, ukå begynne snart "
@@ -241,14 +239,16 @@ class VestskTipping(commands.Cog):
                     )
 
                     try:
-                        async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
+                        async with aiohttp.ClientSession(
+                            timeout=ClientTimeout(total=10)
+                        ) as session:
                             try:
                                 async with session.get(url) as resp:
                                     data = await resp.json()
                             except asyncio.TimeoutError:
                                 logger.warning(
                                     "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s",
-                                    url
+                                    url,
                                 )
                                 await asyncio.sleep(5)
                                 async with session.get(url) as resp:
@@ -263,10 +263,12 @@ class VestskTipping(commands.Cog):
 
                     events = data.get("events", [])
                     sunday_events = [
-                        ev for ev in events
-                        if parse_espn_date(ev["date"]).astimezone(
-                            self.norsk_tz
-                        ).weekday() == 6
+                        ev
+                        for ev in events
+                        if parse_espn_date(ev["date"])
+                        .astimezone(self.norsk_tz)
+                        .weekday()
+                        == 6
                     ]
 
                     if sunday_events:
@@ -274,28 +276,20 @@ class VestskTipping(commands.Cog):
                         first_sunday_game = parse_espn_date(
                             sunday_events[0]["date"]
                         ).astimezone(self.norsk_tz)
-                        reminder_time = (
-                            first_sunday_game - timedelta(minutes=60)
-                        )
+                        reminder_time = first_sunday_game - timedelta(minutes=60)
 
                         if now < reminder_time:
-                            sleep_seconds = (
-                                reminder_time - now
-                            ).total_seconds()
+                            sleep_seconds = (reminder_time - now).total_seconds()
                             await asyncio.sleep(sleep_seconds)
 
-                            if (
-                                self.last_reminder_sunday is None
-                                or (self.last_reminder_sunday !=
-                                    first_sunday_game.date())
+                            if self.last_reminder_sunday is None or (
+                                self.last_reminder_sunday != first_sunday_game.date()
                             ):
                                 await channel.send(
                                     "@everyone Early window snart, husk "
                                     f"<#{VESTSK_KANAL}>"
                                 )
-                                self.last_reminder_sunday = (
-                                    first_sunday_game.date()
-                                )
+                                self.last_reminder_sunday = first_sunday_game.date()
                                 logger.info(
                                     "Søndagspåminnelse sendt for "
                                     f"{first_sunday_game.date()} "
@@ -304,9 +298,7 @@ class VestskTipping(commands.Cog):
 
                             tomorrow = reminder_time + timedelta(days=1)
                             await asyncio.sleep(
-                                (
-                                    tomorrow - datetime.now(self.norsk_tz)
-                                ).total_seconds()
+                                (tomorrow - datetime.now(self.norsk_tz)).total_seconds()
                             )
                             continue
 
@@ -330,9 +322,7 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(sleep_seconds)
 
             except Exception as e:
-                logger.error(
-                    f"Feil i reminder_scheduler: {e}. Prøver igjen om 5 min."
-                )
+                logger.error(f"Feil i reminder_scheduler: {e}. Prøver igjen om 5 min.")
                 await asyncio.sleep(300)
 
     def _format_event(self, ev):
@@ -386,10 +376,7 @@ class VestskTipping(commands.Cog):
         # Hent alle bot-meldinger fra de siste 14 dagene
         all_bot_messages = []
         async for msg in channel.history(limit=200, after=search_limit):
-            if (
-                msg.author == self.bot.user
-                and is_valid_game_message(msg.content)
-            ):
+            if msg.author == self.bot.user and is_valid_game_message(msg.content):
                 all_bot_messages.append(msg)
 
         if not all_bot_messages:
@@ -406,7 +393,7 @@ class VestskTipping(commands.Cog):
 
         for i in range(1, len(all_bot_messages)):
             current_msg = all_bot_messages[i]
-            previous_msg = all_bot_messages[i-1]
+            previous_msg = all_bot_messages[i - 1]
 
             # Hvis det er mer enn 2 timer mellom meldingene, stopp
             time_diff = previous_msg.created_at - current_msg.created_at
@@ -423,17 +410,13 @@ class VestskTipping(commands.Cog):
 
         values = []
         for msg in messages:
-            clean_text = re.sub(r'<:.+?:\d+>', '', msg.content).strip()
+            clean_text = re.sub(r"<:.+?:\d+>", "", msg.content).strip()
             comps = clean_text.split("@")
             if len(comps) == 2:
                 away_team_full = comps[0].strip()
                 home_team_full = comps[1].strip()
-                away = team_location.get(
-                    away_team_full, away_team_full.split()[-1]
-                )
-                home = team_location.get(
-                    home_team_full, home_team_full.split()[-1]
-                )
+                away = team_location.get(away_team_full, away_team_full.split()[-1])
+                home = team_location.get(home_team_full, home_team_full.split()[-1])
                 kampkode = f"{away}@{home}"
             else:
                 kampkode = clean_text
@@ -448,9 +431,7 @@ class VestskTipping(commands.Cog):
                         if emoji_str == DRAW_EMOJI:
                             row[col_idx] = "Uavgjort"
                         else:
-                            row[col_idx] = emoji_to_team_short.get(
-                                emoji_str, ""
-                            )
+                            row[col_idx] = emoji_to_team_short.get(emoji_str, "")
             values.append(row)
 
         try:
@@ -472,10 +453,8 @@ class VestskTipping(commands.Cog):
                 end_col = 1 + num_players
                 range_notation = f"A{start_row}:{chr(64 + end_col)}{end_row}"
                 try:
-                    cell_range = await asyncio.wait_for(asyncio.to_thread(
-                        sheet.range,
-                        range_notation
-                        ), timeout=10
+                    cell_range = await asyncio.wait_for(
+                        asyncio.to_thread(sheet.range, range_notation), timeout=10
                     )
                 except asyncio.TimeoutError:
                     logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
@@ -516,17 +495,12 @@ class VestskTipping(commands.Cog):
     async def _resultater_impl(self, ctx, uke: int | None = None):
         try:
             sheet = await asyncio.wait_for(
-                asyncio.to_thread(get_sheet, "Vestsk Tipping"),
-                timeout=10
+                asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
             )
             if not sheet:
-                raise ResultaterError(
-                    "Kunne ikke hente worksheet 'Vestsk Tipping'"
-                )
+                raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
         except asyncio.TimeoutError:
-            raise ResultaterError(
-                "Timeout ved åpning av sheet 'Vestsk Tipping'"
-            )
+            raise ResultaterError("Timeout ved åpning av sheet 'Vestsk Tipping'")
         except Exception as e:
             raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
 
@@ -537,23 +511,21 @@ class VestskTipping(commands.Cog):
         season = now.year if now.month >= 3 else now.year - 1
         logger.debug(f"Sesong: {season}")
 
-        url = (
-            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/"
-            "scoreboard"
-        )
+        url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/" "scoreboard"
         if uke:
             url += f"?dates={season}&seasontype=2&week={uke}"
         logger.debug(f"Henter URL: {url}")
 
         try:
-            async with aiohttp.ClientSession(timeout=ClientTimeout(total=10)) as session:
+            async with aiohttp.ClientSession(
+                timeout=ClientTimeout(total=10)
+            ) as session:
                 try:
                     async with session.get(url) as resp:
                         data = await resp.json()
                 except asyncio.TimeoutError:
                     logger.warning(
-                        "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s",
-                        url
+                        "API timeout mot ESPN, prøver igjen om 5 sekunder. URL=%s", url
                     )
                     await asyncio.sleep(5)
                     # Retry once
@@ -588,8 +560,7 @@ class VestskTipping(commands.Cog):
                 away_score = int(away["score"])
             except Exception as e:
                 raise ResultaterError(
-                    "Feil ved parsing av kampdata for "
-                    f"{ev.get('id', 'ukjent')}"
+                    "Feil ved parsing av kampdata for " f"{ev.get('id', 'ukjent')}"
                 ) from e
 
             if home_score > away_score:
@@ -607,8 +578,7 @@ class VestskTipping(commands.Cog):
         # Hent alle relevante rader og kolonner i én batch
         try:
             all_rows = await asyncio.wait_for(
-                asyncio.to_thread(sheet.get_all_values),
-                timeout=10
+                asyncio.to_thread(sheet.get_all_values), timeout=10
             )
             sheet_rows = all_rows[2:]
         except asyncio.TimeoutError:
@@ -624,7 +594,7 @@ class VestskTipping(commands.Cog):
             kampkode = row[0].strip()
             if kampkode in gyldige_kampkoder:
                 sheet_kamper.append(kampkode)
-                row_mapping[len(sheet_kamper)-1] = i
+                row_mapping[len(sheet_kamper) - 1] = i
 
         logger.debug(f"Kamper i sheet: {sheet_kamper}")
         logger.debug(f"Row mapping: {row_mapping}")
@@ -633,8 +603,7 @@ class VestskTipping(commands.Cog):
         uke_total_row = max(row_mapping.values(), default=3) + 1
         sesong_total_row = uke_total_row + 1
         logger.debug(
-            f"Uke total rad: {uke_total_row}, "
-            f"sesong total rad: {sesong_total_row}"
+            f"Uke total rad: {uke_total_row}, " f"sesong total rad: {sesong_total_row}"
         )
 
         green = green_format()
@@ -652,8 +621,7 @@ class VestskTipping(commands.Cog):
 
         # Hent alle celler for kampdata i én batch
         range_notation = (
-            f"{chr(64 + start_col)}{start_row}:"
-            f"{chr(64 + end_col)}{end_row}"
+            f"{chr(64 + start_col)}{start_row}:" f"{chr(64 + end_col)}{end_row}"
         )
         try:
             kamp_cell_range = await asyncio.wait_for(
@@ -688,19 +656,20 @@ class VestskTipping(commands.Cog):
 
                 logger.debug(
                     f"Kampkode={kampkode}, riktig_vinner={riktig_vinner}, "
-                    "teams=" + str([
-                        (v.get('short'), v.get('name'))
-                        for v in teams.values()
-                    ])
+                    "teams="
+                    + str([(v.get("short"), v.get("name")) for v in teams.values()])
                 )
 
                 gyldige_svar = (
-                    [riktig_vinner] if riktig_vinner == "Uavgjort"
+                    [riktig_vinner]
+                    if riktig_vinner == "Uavgjort"
                     else [
                         v["short"]
                         for v in teams.values()
-                        if (riktig_vinner and
-                            v["short"].lower() == riktig_vinner.lower())
+                        if (
+                            riktig_vinner
+                            and v["short"].lower() == riktig_vinner.lower()
+                        )
                     ]
                 )
 
@@ -725,8 +694,7 @@ class VestskTipping(commands.Cog):
         # Skriv "Ukespoeng" i kolA
         try:
             uke_label_cell = await asyncio.wait_for(
-                asyncio.to_thread(sheet.cell, uke_total_row, 1),
-                timeout=10
+                asyncio.to_thread(sheet.cell, uke_total_row, 1), timeout=10
             )
             uke_label_cell.value = "Ukespoeng"
             cell_updates.append(uke_label_cell)
@@ -742,8 +710,7 @@ class VestskTipping(commands.Cog):
             col_idx = start_col + pidx
             try:
                 cell_obj = await asyncio.wait_for(
-                    asyncio.to_thread(sheet.cell, uke_total_row, col_idx),
-                    timeout=10
+                    asyncio.to_thread(sheet.cell, uke_total_row, col_idx), timeout=10
                 )
             except asyncio.TimeoutError:
                 logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
@@ -775,8 +742,7 @@ class VestskTipping(commands.Cog):
         # --- Sett inn Sesongpoeng på rad rett under Ukespoeng ---
         try:
             sesong_label_cell = await asyncio.wait_for(
-                asyncio.to_thread(sheet.cell, uke_total_row + 1, 1),
-                timeout=10
+                asyncio.to_thread(sheet.cell, uke_total_row + 1, 1), timeout=10
             )
             sesong_label_cell.value = "Sesongpoeng"
             cell_updates.append(sesong_label_cell)
@@ -791,14 +757,14 @@ class VestskTipping(commands.Cog):
             col_idx = start_col + pidx
             tidligere_total = 0
             if forrige_sesong_row:
-                val = all_sheet_rows[forrige_sesong_row-1][col_idx-1]
+                val = all_sheet_rows[forrige_sesong_row - 1][col_idx - 1]
                 tidligere_total = int(val) if val and str(val).isdigit() else 0
 
             ny_total = tidligere_total + uke_poeng[pidx]
             try:
                 cell_obj = await asyncio.wait_for(
                     asyncio.to_thread(sheet.cell, uke_total_row + 1, col_idx),
-                    timeout=10
+                    timeout=10,
                 )
             except asyncio.TimeoutError:
                 logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
@@ -831,7 +797,7 @@ class VestskTipping(commands.Cog):
         # Bruk green_format/red_format/yellow_format for batchUpdate.
         # Finn sheetId for arket
         try:
-            sheet_id = sheet._properties['sheetId']
+            sheet_id = sheet._properties["sheetId"]
         except Exception as e:
             raise ResultaterError(f"Kunne ikke hente sheetId: {e}")
 
@@ -839,60 +805,57 @@ class VestskTipping(commands.Cog):
         requests = []
         for row_idx, col_idx, fmt in format_updates:
             # fmt er cellFormat-dict, f.eks. fra green_format()
-            requests.append({
-                "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": row_idx-1,
-                        "endRowIndex": row_idx,
-                        "startColumnIndex": col_idx-1,
-                        "endColumnIndex": col_idx
-                    },
-                    "cell": {"userEnteredFormat": fmt},
-                    "fields": (
-                        "userEnteredFormat.backgroundColor,"
-                        "userEnteredFormat.textFormat"
-                    )
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": row_idx - 1,
+                            "endRowIndex": row_idx,
+                            "startColumnIndex": col_idx - 1,
+                            "endColumnIndex": col_idx,
+                        },
+                        "cell": {"userEnteredFormat": fmt},
+                        "fields": (
+                            "userEnteredFormat.backgroundColor,"
+                            "userEnteredFormat.textFormat"
+                        ),
+                    }
                 }
-            })
+            )
 
         if requests:
             try:
                 await asyncio.wait_for(
                     asyncio.to_thread(
-                        sheet.spreadsheet.batch_update,
-                        {"requests": requests}
+                        sheet.spreadsheet.batch_update, {"requests": requests}
                     ),
-                    timeout=10
+                    timeout=10,
                 )
             except Exception as e:
-                raise ResultaterError(
-                    f"Feil ved batch-formattering av celler: {e}"
-                )
+                raise ResultaterError(f"Feil ved batch-formattering av celler: {e}")
 
         logger.info("Ferdig med oppdatering av sheet, sender Discord-melding")
 
         # Discord-melding
         try:
             header_row = await asyncio.wait_for(
-                asyncio.to_thread(sheet.row_values, 1),
-                timeout=10
+                asyncio.to_thread(sheet.row_values, 1), timeout=10
             )
-            header_row = header_row[1:1+num_players]
+            header_row = header_row[1 : 1 + num_players]
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
         except Exception as e:
             logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
             return
-        
+
         discord_msg = []
         for idx, name in enumerate(header_row, start=2):
-            uke_p = uke_poeng[idx-2]
+            uke_p = uke_poeng[idx - 2]
             try:
                 sesong_cell = await asyncio.wait_for(
-                    asyncio.to_thread(sheet.cell, sesong_total_row, idx),
-                    timeout=10
+                    asyncio.to_thread(sheet.cell, sesong_total_row, idx), timeout=10
                 )
                 sesong_p_cell = sesong_cell.value
             except asyncio.TimeoutError:
@@ -922,8 +885,7 @@ class VestskTipping(commands.Cog):
         lines.append("```")
         await ctx.send("\n".join(lines))
         await ctx.send(
-            f"✅ Resultater for uke {uke if uke else 'nåværende'} er "
-            "oppdatert."
+            f"✅ Resultater for uke {uke if uke else 'nåværende'} er " "oppdatert."
         )
 
 

@@ -38,13 +38,10 @@ class Responses(Cog):
             await ctx.send(
                 "<:hou:752546616526897243> LET'S GO "
                 "JOHN CHRISTIAN KA'IMINOEAULOAMEKA'IKEOKEKUMUPA'A "
-                "\"KA'IMI\" FAIRBAIRN! <:hou:752546616526897243>"
+                '"KA\'IMI" FAIRBAIRN! <:hou:752546616526897243>'
             )
         except Exception as e:
-            raise ResponseError(
-                "kaimi",
-                f"Kunne ikke sende Ka'imi-melding: {str(e)}"
-            )
+            raise ResponseError("kaimi", f"Kunne ikke sende Ka'imi-melding: {str(e)}")
 
     @commands.command(name="doc")
     async def doc(self, ctx: Context) -> None:
@@ -62,10 +59,7 @@ class Responses(Cog):
                 "1PBCDP_9ucjJ00RIdROJ-sXNJsQEhJoIlDMSZ3DGBvx4/edit?usp=sharing"
             )
         except Exception as e:
-            raise ResponseError(
-                "doc",
-                f"Kunne ikke sende dokumentlenke: {str(e)}"
-            )
+            raise ResponseError("doc", f"Kunne ikke sende dokumentlenke: {str(e)}")
 
     @commands.command(name="doink")
     async def doink(self, ctx):
@@ -83,10 +77,7 @@ class Responses(Cog):
                 "<:lamarbruh:764434396240805898> "
             )
         except Exception as e:
-            raise ResponseError(
-                "doink",
-                f"Kunne ikke sende doink-melding: {str(e)}"
-            )
+            raise ResponseError("doink", f"Kunne ikke sende doink-melding: {str(e)}")
 
     @commands.command(name="incel")
     async def incel(self, ctx):
@@ -101,10 +92,7 @@ class Responses(Cog):
         try:
             await ctx.send("Harrison Bitchker er gerontofil")
         except Exception as e:
-            raise ResponseError(
-                "incel",
-                f"Kunne ikke sende Butker-melding: {str(e)}"
-            )
+            raise ResponseError("incel", f"Kunne ikke sende Butker-melding: {str(e)}")
 
 
 async def setup(bot):

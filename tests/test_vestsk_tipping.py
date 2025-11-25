@@ -13,9 +13,7 @@ def mock_google_credentials(monkeypatch):
     # Mock get_client slik at ingen creds trengs
     monkeypatch.setattr(sheets, "get_client", lambda: MagicMock())
     # Mock get_sheet slik at alle tester får et dummy sheet
-    monkeypatch.setattr(
-        sheets, "get_sheet", lambda name="Vestsk Tipping": MagicMock()
-        )
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": MagicMock())
 
 
 def test_format_event_simple():
@@ -25,7 +23,7 @@ def test_format_event_simple():
         "home": "TeamA",
         "away": "TeamB",
         "date": "2025-09-20",
-        "competitions": "NFL"
+        "competitions": "NFL",
     }
     formatted = cog._format_event(event)
     assert "TeamB @ TeamA" in formatted
@@ -66,6 +64,7 @@ async def test_export_handles_no_events(monkeypatch):
     async def mock_history(*args, **kwargs):
         if False:
             yield  # tom generator
+
     ctx.channel.history.return_value = mock_history()
 
     sheet.get_all_values.return_value = [["A", "old1"]]
@@ -80,6 +79,7 @@ async def test_resultater_handles_api_error(monkeypatch):
     cog = VestskTipping.__new__(VestskTipping)
     cog.bot = MagicMock()
     from unittest.mock import AsyncMock
+
     ctx = MagicMock()
     ctx.send = AsyncMock()
     ctx.channel = MagicMock()
@@ -89,9 +89,7 @@ async def test_resultater_handles_api_error(monkeypatch):
     sheet = MagicMock()
     sheet.row_values = AsyncMock(return_value=["Header", "Player1", "Player2"])
     sheet.cell = AsyncMock(return_value=MagicMock(value="0"))
-    monkeypatch.setattr(
-        sheets, "get_sheet", lambda name="Vestsk Tipping": sheet
-        )
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
 
     try:
         await cog._resultater_impl(ctx)
@@ -123,9 +121,7 @@ async def test_logging_on_export(monkeypatch):
     ctx.channel = MagicMock()
     ctx.channel.send = AsyncMock()
 
-    monkeypatch.setattr(
-        sheets, "get_sheet", lambda name="Vestsk Tipping": sheet
-        )
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
 
     # Mock sheet data
     sheet.col_values.return_value = [""]  # tom første kolonne
@@ -199,9 +195,7 @@ def test_format_event():
 @pytest.mark.asyncio
 async def test_export_error(monkeypatch):
     # Simuler at get_sheet returnerer None
-    monkeypatch.setattr(
-        sheets, "get_sheet", lambda name="Vestsk Tipping": None
-        )
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": None)
     cog = VestskTipping.__new__(VestskTipping)
     cog.bot = MagicMock()
     cog.norsk_tz = pytz.timezone("Europe/Oslo")
@@ -215,10 +209,10 @@ async def test_export_error(monkeypatch):
 async def test_resultater_no_events(monkeypatch):
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
-    mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
+    mock_sheet.get_all_values.return_value = [["Kamp"] * 3] * 10
     monkeypatch.setattr(
         "cogs.sheets.get_sheet", lambda name="Vestsk Tipping": mock_sheet
-        )
+    )
     monkeypatch.setattr("cogs.sheets.green_format", lambda: "green")
     monkeypatch.setattr("cogs.sheets.red_format", lambda: "red")
     monkeypatch.setattr("cogs.sheets.yellow_format", lambda: "yellow")
@@ -243,6 +237,7 @@ async def test_resultater_no_events(monkeypatch):
 
         def get(self, url, *args, **kwargs):
             return DummyAiohttpResponse()
+
     monkeypatch.setattr(
         "cogs.vestsk_tipping.aiohttp.ClientSession",
         lambda *a, **kw: DummyAiohttpSession(),
@@ -261,6 +256,7 @@ async def test_resultater_no_events(monkeypatch):
 
         async def send(self, msg):
             self.sent_messages.append(msg)
+
     ctx = DummyCtx()
     with pytest.raises(NoEventsFoundError):
         await cog._resultater_impl(ctx)
@@ -276,10 +272,8 @@ async def test_export_impl_message_filtering(monkeypatch):
     mock_sheet.range.return_value = [MagicMock(), MagicMock(), MagicMock()]
     mock_sheet.update_cells.side_effect = lambda cells: setattr(
         mock_sheet, "updated", True
-        )
-    monkeypatch.setattr(
-        sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet
-        )
+    )
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet)
 
     # Dummy bot og context
     class DummyUser:
@@ -314,6 +308,7 @@ async def test_export_impl_message_filtering(monkeypatch):
             async def gen():
                 for m in self._messages:
                     yield m
+
             return gen()
 
     class DummyCtx:
@@ -355,18 +350,12 @@ async def test_export_impl_message_filtering(monkeypatch):
 def test_is_valid_game_message():
     # Gyldige meldinger
     assert VestskTipping.is_valid_game_message("Patriots @ Giants")
-    assert VestskTipping.is_valid_game_message(
-        "New England Patriots @ New York Giants"
-        )
+    assert VestskTipping.is_valid_game_message("New England Patriots @ New York Giants")
     assert VestskTipping.is_valid_game_message("Raiders @ 49ers")
 
     # Ugyldige meldinger: mentions
-    assert not VestskTipping.is_valid_game_message(
-        "Patriots @ Giants <@123456>"
-        )
-    assert not VestskTipping.is_valid_game_message(
-        "@everyone Patriots @ Giants"
-        )
+    assert not VestskTipping.is_valid_game_message("Patriots @ Giants <@123456>")
+    assert not VestskTipping.is_valid_game_message("@everyone Patriots @ Giants")
     assert not VestskTipping.is_valid_game_message("@here Patriots @ Giants")
 
     # Ugyldige meldinger: feil format
@@ -375,9 +364,7 @@ def test_is_valid_game_message():
     assert not VestskTipping.is_valid_game_message("")
 
     # Gyldig med emoji (skal fjernes)
-    assert VestskTipping.is_valid_game_message(
-        "Patriots @ Giants <:_patriots:123456>"
-        )
+    assert VestskTipping.is_valid_game_message("Patriots @ Giants <:_patriots:123456>")
 
 
 @pytest.mark.asyncio
@@ -386,7 +373,7 @@ async def test_resultater_no_events_api(monkeypatch):
     # Mock get_sheet til å returnere et dummy sheet
     mock_sheet = MagicMock()
     mock_sheet.row_values.return_value = ["Header", "111", "222"]
-    mock_sheet.get_all_values.return_value = [["Kamp"]*3]*10
+    mock_sheet.get_all_values.return_value = [["Kamp"] * 3] * 10
 
     # Mock formateringsfunksjoner
     monkeypatch.setattr("cogs.sheets.green_format", lambda: "green")
@@ -455,12 +442,10 @@ async def test_export_impl_simple(monkeypatch):
     mock_sheet.range.return_value = [MagicMock(), MagicMock(), MagicMock()]
     mock_sheet.update_cells.side_effect = lambda cells: print(
         "[DEBUG] update_cells called"
-        )
+    )
 
     # Patch get_sheet
-    monkeypatch.setattr(
-        sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet
-        )
+    monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": mock_sheet)
 
     # --- Dummy cog ---
     cog = VestskTipping.__new__(VestskTipping)
@@ -470,6 +455,7 @@ async def test_export_impl_simple(monkeypatch):
     class DummyCtx:
         async def send(self, msg):
             print("[DEBUG] ctx.send:", msg)
+
     ctx = DummyCtx()
 
     # --- Dummy _export_impl ---
@@ -518,6 +504,7 @@ async def test_reminder_scheduler_thursday(monkeypatch):
         sleep_calls["n"] += 1
         if sleep_calls["n"] >= 2:
             raise SystemExit()
+
     monkeypatch.setattr("cogs.vestsk_tipping.asyncio.sleep", fast_sleep)
 
     # Sett nåværende tid til torsdag 17:50 lokal tid
@@ -528,6 +515,7 @@ async def test_reminder_scheduler_thursday(monkeypatch):
         @classmethod
         def now(cls, tz=None):
             return fixed_now
+
     monkeypatch.setattr(vt_mod, "datetime", FixedDateTime)
 
     with pytest.raises(SystemExit):
@@ -564,6 +552,7 @@ async def test_reminder_scheduler_sunday(monkeypatch):
         sleep_calls["n"] += 1
         if sleep_calls["n"] >= 2:
             raise SystemExit()
+
     monkeypatch.setattr("cogs.vestsk_tipping.asyncio.sleep", fast_sleep)
 
     fixed_now = cog.norsk_tz.localize(datetime(2024, 9, 8, 17, 55))
@@ -577,6 +566,7 @@ async def test_reminder_scheduler_sunday(monkeypatch):
         @classmethod
         def fromisoformat(cls, s):
             return datetime.fromisoformat(s)
+
     monkeypatch.setattr(vt_mod, "datetime", FixedDateTime)
 
     class DummyAiohttpResponse:
@@ -590,17 +580,13 @@ async def test_reminder_scheduler_sunday(monkeypatch):
                                 "competitors": [
                                     {
                                         "homeAway": "home",
-                                        "team": {
-                                            "displayName": "New York Giants"
-                                            }
+                                        "team": {"displayName": "New York Giants"},
                                     },
                                     {
                                         "homeAway": "away",
                                         "team": {
-                                            "displayName": (
-                                                "New England Patriots"
-                                            )
-                                            }
+                                            "displayName": ("New England Patriots")
+                                        },
                                     },
                                 ]
                             }

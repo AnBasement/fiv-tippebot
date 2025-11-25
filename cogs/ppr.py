@@ -62,9 +62,14 @@ class PPR(commands.Cog):
             PPRFetchError: Hvis PPR-data ikke kan hentes for en spiller.
         """
         target_names = [
-            "Kristoffer", "Arild", "Knut",
-            "Einar", "Torstein", "Peter",
-            "Edvard H", "Tor"
+            "Kristoffer",
+            "Arild",
+            "Knut",
+            "Einar",
+            "Torstein",
+            "Peter",
+            "Edvard H",
+            "Tor",
         ]
 
         players = []
@@ -77,8 +82,7 @@ class PPR(commands.Cog):
             logger.debug(f"Prosesserer ark: {ws.title}")
             try:
                 rows = await asyncio.wait_for(
-                    asyncio.to_thread(ws.get_all_values),
-                    timeout=10
+                    asyncio.to_thread(ws.get_all_values), timeout=10
                 )
                 target_row = None
                 for i, row in enumerate(rows, start=1):
@@ -88,29 +92,23 @@ class PPR(commands.Cog):
 
                 if target_row:
                     try:
-                        ppr_value = float(
-                            rows[target_row-1][1]
-                        )  # B = indeks 1
+                        ppr_value = float(rows[target_row - 1][1])  # B = indeks 1
                         players.append({"team": ws.title, "ppr": ppr_value})
                         logger.debug(f"PPR for {ws.title}: {ppr_value}")
                     except ValueError as e:
                         raise PPRFetchError(
                             ws.title,
                             season,
-                            f"Ugyldig PPR-verdi i rad {target_row}: {str(e)}"
+                            f"Ugyldig PPR-verdi i rad {target_row}: {str(e)}",
                         )
                 else:
                     raise PPRFetchError(
-                        ws.title,
-                        season,
-                        f"Fant ingen rad for sesong {season}"
+                        ws.title, season, f"Fant ingen rad for sesong {season}"
                     )
 
             except Exception as e:
                 raise PPRFetchError(
-                    ws.title,
-                    season,
-                    f"Feil ved lesing av ark: {str(e)}"
+                    ws.title, season, f"Feil ved lesing av ark: {str(e)}"
                 )
 
         logger.info(f"Hentet PPR-data for {len(players)} spillere")
@@ -150,8 +148,7 @@ class PPR(commands.Cog):
 
         try:
             all_rows_colA = await asyncio.wait_for(
-                asyncio.to_thread(history_ws.col_values, 1),
-                timeout=10
+                asyncio.to_thread(history_ws.col_values, 1), timeout=10
             )
             start_row = len(all_rows_colA) + 1
             num_rows = len(rows_to_add)
@@ -160,8 +157,7 @@ class PPR(commands.Cog):
             end_row = start_row + num_rows - 1
             range_notation = f"A{start_row}:{chr(64 + num_cols)}{end_row}"
             cell_range = await asyncio.wait_for(
-                asyncio.to_thread(history_ws.range, range_notation),
-                timeout=10
+                asyncio.to_thread(history_ws.range, range_notation), timeout=10
             )
             flat_values = [val for row in rows_to_add for val in row]
 
@@ -169,15 +165,12 @@ class PPR(commands.Cog):
                 cell_obj.value = val
 
             await asyncio.wait_for(
-                asyncio.to_thread(history_ws.update_cells, cell_range),
-                timeout=10
+                asyncio.to_thread(history_ws.update_cells, cell_range), timeout=10
             )
             logger.info(f"Lagret snapshot med {num_rows} PPR-verdier")
 
         except Exception as e:
-            raise PPRSnapshotError(
-                f"Kunne ikke lagre PPR snapshot: {str(e)}"
-            )
+            raise PPRSnapshotError(f"Kunne ikke lagre PPR snapshot: {str(e)}")
 
     @commands.command(name="ppr")
     @commands.check(
@@ -195,15 +188,12 @@ class PPR(commands.Cog):
         """
         try:
             players = await self._get_players()
-            players_sorted = sorted(
-                players, key=lambda x: x["ppr"], reverse=True
-            )
+            players_sorted = sorted(players, key=lambda x: x["ppr"], reverse=True)
             # Last historiske verdier
             try:
                 history_ws = self.sheet.worksheet("PPR-historikk")
                 rows = await asyncio.wait_for(
-                    asyncio.to_thread(history_ws.get_all_values),
-                    timeout=10
+                    asyncio.to_thread(history_ws.get_all_values), timeout=10
                 )
                 logger.debug(f"Hentet {len(rows)} historiske PPR-verdier")
             except Exception as e:
@@ -233,9 +223,7 @@ class PPR(commands.Cog):
             old_ppr = last_snapshot.get(team)
             old_rank = last_ranks.get(team)
             player["rank"] = rank
-            player["diff"] = (
-                player["ppr"] - old_ppr if old_ppr is not None else 0.0
-            )
+            player["diff"] = player["ppr"] - old_ppr if old_ppr is not None else 0.0
             if old_rank is not None:
                 if old_rank == rank:
                     player["rank_change"] = "="
@@ -258,11 +246,10 @@ class PPR(commands.Cog):
             print(f"[DEBUG] {line}")
 
         msg = "\n".join(msg_lines)
-        await ctx.send(
-            f"@everyone, ukens PPR-oppdatering:\n```text\n{msg}\n```"
-        )
+        await ctx.send(f"@everyone, ukens PPR-oppdatering:\n```text\n{msg}\n```")
         await self._save_snapshot(players_sorted)
         print("[DEBUG] Snapshot lagret.")
+
 
 # --- Setup ---
 

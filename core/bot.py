@@ -28,11 +28,11 @@ setup_global_cooldown(bot)
 
 # === Cogs ===
 COGS = [
-    "cogs.utility",           # ping, småkommandoer
-    "cogs.vestsk_tipping",    # kamper, eksporter, resultater
-    "cogs.responses",         # forskjellige humorkommandoer
-    "cogs.ppr",               # oppdaterer og poster PPRs
-    "cogs.fantasy_reminders"  # generelle påminnelser for fantasyligaen
+    "cogs.utility",  # ping, småkommandoer
+    "cogs.vestsk_tipping",  # kamper, eksporter, resultater
+    "cogs.responses",  # forskjellige humorkommandoer
+    "cogs.ppr",  # oppdaterer og poster PPRs
+    "cogs.fantasy_reminders",  # generelle påminnelser for fantasyligaen
 ]
 
 
@@ -62,9 +62,7 @@ async def on_command_error(ctx, error):
         await admin_channel.send(error_msg)
 
     # Logg i terminal
-    print(
-        f"[ERROR] Command: {ctx.command}, User: {ctx.author}, Error: {error}"
-        )
+    print(f"[ERROR] Command: {ctx.command}, User: {ctx.author}, Error: {error}")
 
 
 # === Main async startup ===
@@ -81,6 +79,7 @@ async def main():
         if TOKEN is None:
             raise ValueError("TOKEN ikke definert i miljøvariabler")
         await bot.start(TOKEN)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

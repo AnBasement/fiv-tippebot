@@ -49,9 +49,7 @@ def test_get_client_none(monkeypatch):
 def test_get_client_returns_client(monkeypatch):
     dummy_client = "client_instance"
     monkeypatch.setattr(sheets, "get_creds", lambda: "creds")
-    monkeypatch.setattr(
-        sheets.gspread, "authorize", lambda creds: dummy_client
-        )
+    monkeypatch.setattr(sheets.gspread, "authorize", lambda creds: dummy_client)
     client = sheets.get_client()
     assert client == dummy_client
 

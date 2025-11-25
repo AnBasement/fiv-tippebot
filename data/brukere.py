@@ -6,5 +6,5 @@ TEAM_NAMES = {
     "Torstein": "Madla Lard Lads",
     "Peter": "Bjørgvin Latskap",
     "Edvard H": "Bergaluf Hvidings",
-    "Tor": "Møhlenpris Bondelag"
+    "Tor": "Møhlenpris Bondelag",
 }

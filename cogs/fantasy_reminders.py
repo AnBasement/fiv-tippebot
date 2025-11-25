@@ -36,31 +36,31 @@ class FantasyReminders(commands.Cog):
 
     async def reminder_scheduler(self) -> None:
         """
-    Scheduler som sender ukentlig påminnelse om waivers
-    tirsdager kl. 18:00.
+        Scheduler som sender ukentlig påminnelse om waivers
+        tirsdager kl. 18:00.
 
-        Sjekker tidspunkt for neste tirsdag, og sover til det tidspunktet.
-        Hvis botten startes midt i uken, finner den automatisk neste tirsdag.
-        Sørger for at meldingen kun sendes én gang per uke ved å sjekke
-        `last_waiver_week`.
-        Logger eventuelle feil og backoff på 5 minutter ved exception.
+            Sjekker tidspunkt for neste tirsdag, og sover til det tidspunktet.
+            Hvis botten startes midt i uken, finner den automatisk neste tirsdag.
+            Sørger for at meldingen kun sendes én gang per uke ved å sjekke
+            `last_waiver_week`.
+            Logger eventuelle feil og backoff på 5 minutter ved exception.
 
-        Attributes:
-            channel (discord.TextChannel): Discord-kanalen der meldingen sendes
-            now (datetime): Nåværende tidspunkt i norsk tidssone
-            weekday (int):
-                Ukedag for nåværende tidspunkt (0=mandag, 1=tirsdag, …)
-            week_num (int): ISO-ukenummer for nåværende uke
-            reminder_time (datetime): Tidspunkt meldingen skal sendes
-            tomorrow (datetime):
-                Dagen etter reminder_time, for å unngå dobbelposting
-            next_tuesday (datetime): Beregnet tidspunkt for neste tirsdag
+            Attributes:
+                channel (discord.TextChannel): Discord-kanalen der meldingen sendes
+                now (datetime): Nåværende tidspunkt i norsk tidssone
+                weekday (int):
+                    Ukedag for nåværende tidspunkt (0=mandag, 1=tirsdag, …)
+                week_num (int): ISO-ukenummer for nåværende uke
+                reminder_time (datetime): Tidspunkt meldingen skal sendes
+                tomorrow (datetime):
+                    Dagen etter reminder_time, for å unngå dobbelposting
+                next_tuesday (datetime): Beregnet tidspunkt for neste tirsdag
 
-        Example:
-            Scheduler kjører i bakgrunnen som en asyncio-task:
+            Example:
+                Scheduler kjører i bakgrunnen som en asyncio-task:
 
-                >>> fantasy_cog = FantasyReminders(bot)
-                >>> bot.add_cog(fantasy_cog)
+                    >>> fantasy_cog = FantasyReminders(bot)
+                    >>> bot.add_cog(fantasy_cog)
         """
         await self.bot.wait_until_ready()
         channel = self.bot.get_channel(PREIK_KANAL)
@@ -81,14 +81,12 @@ class FantasyReminders(commands.Cog):
                     )
 
                     if now < reminder_time:
-                        sleep_seconds: float = (
-                            reminder_time - now
-                        ).total_seconds()
+                        sleep_seconds: float = (reminder_time - now).total_seconds()
                         await asyncio.sleep(sleep_seconds)
 
                     if (
-                        self.last_waiver_week is None or
-                        self.last_waiver_week != week_num
+                        self.last_waiver_week is None
+                        or self.last_waiver_week != week_num
                     ):
                         if channel:
                             await channel.send("@everyone Ikke glem waivers!")
@@ -106,9 +104,7 @@ class FantasyReminders(commands.Cog):
                     continue
 
                 # === Beregn tid til neste tirsdag ===
-                next_tuesday: datetime = now + timedelta(
-                    days=(1 - weekday) % 7
-                )
+                next_tuesday: datetime = now + timedelta(days=(1 - weekday) % 7)
                 next_tuesday = next_tuesday.replace(
                     hour=18, minute=0, second=0, microsecond=0
                 )
@@ -119,9 +115,7 @@ class FantasyReminders(commands.Cog):
                 await asyncio.sleep(sleep_seconds)
 
             except Exception as e:
-                logger.error(
-                    f"Feil i FantasyReminders: {e}. Prøver igjen om 5 min."
-                )
+                logger.error(f"Feil i FantasyReminders: {e}. Prøver igjen om 5 min.")
                 await asyncio.sleep(300)
 
 

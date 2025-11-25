@@ -16,7 +16,7 @@ def setup_global_cooldown(bot, rate=1, per=5):
     """
     cooldown = commands.CooldownMapping.from_cooldown(
         rate, per, commands.BucketType.user
-        )
+    )
     last_warned = {}
 
     @bot.check

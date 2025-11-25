@@ -9,3 +9,4 @@ Flask==2.3.3
 pytest
 pytest-asyncio
 asynctest
+black

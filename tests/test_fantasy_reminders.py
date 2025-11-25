@@ -30,9 +30,7 @@ class TestFantasyReminders:
 
     def test_init(self, mock_bot):
         """Tester at FantasyReminders initialiseres riktig."""
-        with patch.object(
-            FantasyReminders, 'reminder_scheduler', return_value=None
-        ):
+        with patch.object(FantasyReminders, "reminder_scheduler", return_value=None):
             cog = FantasyReminders(mock_bot)
 
             assert cog.bot == mock_bot
@@ -48,11 +46,11 @@ class TestFantasyReminders:
         tuesday_1800 = datetime(2024, 1, 2, 18, 0, 0)  # Tuesday
         tuesday_1800 = pytz.timezone("Europe/Oslo").localize(tuesday_1800)
 
-        with patch('cogs.fantasy_reminders.datetime') as mock_datetime:
+        with patch("cogs.fantasy_reminders.datetime") as mock_datetime:
             mock_datetime.now.return_value = tuesday_1800
 
             with patch.object(
-                FantasyReminders, 'reminder_scheduler', return_value=None
+                FantasyReminders, "reminder_scheduler", return_value=None
             ):
                 cog = FantasyReminders(mock_bot)
                 cog.last_waiver_week = None
@@ -69,23 +67,17 @@ class TestFantasyReminders:
 
                 mock_channel.send.assert_called_once_with(
                     "@everyone Ikke glem waivers!"
-                    )
+                )
 
     @pytest.mark.asyncio
-    async def test_no_duplicate_reminders_same_week(
-        self, mock_bot, mock_channel
-    ):
+    async def test_no_duplicate_reminders_same_week(self, mock_bot, mock_channel):
         """Tester at påminnelser ikke sendes to ganger samme uke."""
         mock_bot.get_channel.return_value = mock_channel
 
-        tuesday = pytz.timezone("Europe/Oslo").localize(
-            datetime(2024, 1, 2, 18, 0, 0)
-        )
+        tuesday = pytz.timezone("Europe/Oslo").localize(datetime(2024, 1, 2, 18, 0, 0))
         current_week = tuesday.isocalendar()[1]
 
-        with patch.object(
-            FantasyReminders, 'reminder_scheduler', return_value=None
-        ):
+        with patch.object(FantasyReminders, "reminder_scheduler", return_value=None):
             cog = FantasyReminders(mock_bot)
             cog.last_waiver_week = current_week  # Already sent this week
 

@@ -23,7 +23,7 @@ from core.errors import (
 # Definerer hvilke Google API-tilganger som trengs
 scope: List[str] = [
     "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive",
 ]
 
 
@@ -45,9 +45,7 @@ def get_creds() -> ServiceAccountCredentials:
             "credentials.json", scope  # type: ignore
         )
     except Exception as e:
-        raise MissingCredentialsError(
-            f"Feil ved lesing av credentials.json: {str(e)}"
-        )
+        raise MissingCredentialsError(f"Feil ved lesing av credentials.json: {str(e)}")
 
 
 def get_client() -> Client:
@@ -66,9 +64,7 @@ def get_client() -> Client:
     except MissingCredentialsError:
         raise
     except Exception as e:
-        raise ClientAuthorizationError(
-            f"Kunne ikke autorisere mot Google: {str(e)}"
-        )
+        raise ClientAuthorizationError(f"Kunne ikke autorisere mot Google: {str(e)}")
 
 
 def get_sheet(sheet_name: str, worksheet_index: int = 0) -> Worksheet:
@@ -91,15 +87,11 @@ def get_sheet(sheet_name: str, worksheet_index: int = 0) -> Worksheet:
         return client.open(sheet_name).get_worksheet(worksheet_index)
     except gspread.SpreadsheetNotFound:
         raise SheetNotFoundError(
-            sheet_name,
-            worksheet_index,
-            f"Fant ikke dokumentet '{sheet_name}'"
+            sheet_name, worksheet_index, f"Fant ikke dokumentet '{sheet_name}'"
         )
     except Exception as e:
         raise SheetNotFoundError(
-            sheet_name,
-            worksheet_index,
-            f"Feil ved åpning av dokument: {str(e)}"
+            sheet_name, worksheet_index, f"Feil ved åpning av dokument: {str(e)}"
         )
 
 
@@ -120,9 +112,7 @@ def format_cell(
         format_cell_range(sheet, cell_range, color_fmt)
     except Exception as e:
         # Logger feilen men lar den fortsette siden formatering ikke er kritisk
-        print(
-            f"Advarsel: Kunne ikke formatere celle {col_letter}{row}: {str(e)}"
-        )
+        print(f"Advarsel: Kunne ikke formatere celle {col_letter}{row}: {str(e)}")
 
 
 def green_format() -> Dict[str, Any]:
@@ -134,9 +124,7 @@ def green_format() -> Dict[str, Any]:
     """
     return {
         "backgroundColor": {"red": 0.0, "green": 1.0, "blue": 0.0},
-        "textFormat": {
-            "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}
-        }
+        "textFormat": {"foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}},
     }
 
 
@@ -149,9 +137,7 @@ def red_format() -> Dict[str, Any]:
     """
     return {
         "backgroundColor": {"red": 1.0, "green": 0.0, "blue": 0.0},
-        "textFormat": {
-            "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}
-        }
+        "textFormat": {"foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}},
     }
 
 
@@ -164,7 +150,5 @@ def yellow_format() -> Dict[str, Any]:
     """
     return {
         "backgroundColor": {"red": 1.0, "green": 1.0, "blue": 0.0},
-        "textFormat": {
-            "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}
-        }
+        "textFormat": {"foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}},
     }
