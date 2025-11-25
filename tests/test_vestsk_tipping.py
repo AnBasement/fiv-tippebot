@@ -91,6 +91,52 @@ async def test_resultater_handles_api_error(monkeypatch):
     sheet.cell = AsyncMock(return_value=MagicMock(value="0"))
     monkeypatch.setattr(sheets, "get_sheet", lambda name="Vestsk Tipping": sheet)
 
+    class DummyAiohttpResponse:
+        async def json(self):
+            return {
+                "events": [
+                    {
+                        "competitions": [
+                            {
+                                "competitors": [
+                                    {
+                                        "homeAway": "home",
+                                        "team": {"displayName": "Giants"},
+                                        "score": "17",
+                                    },
+                                    {
+                                        "homeAway": "away",
+                                        "team": {"displayName": "Patriots"},
+                                        "score": "24",
+                                    },
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummyAiohttpSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, *args, **kwargs):
+            return DummyAiohttpResponse()
+
+    monkeypatch.setattr(
+        "cogs.vestsk_tipping.aiohttp.ClientSession",
+        lambda *a, **kw: DummyAiohttpSession(),
+    )
+
     try:
         await cog._resultater_impl(ctx)
     except NoEventsFoundError:
