@@ -650,22 +650,6 @@ class VestskTipping(commands.Cog):
                 cell_obj.value = str(poeng)
                 cell_updates.append(cell_obj)
 
-        # --- Sett inn Ukespoeng på ny rad etter denne ukens kamper ---
-        uke_label_cell = await asyncio.to_thread(sheet.cell, uke_total_row, 1)
-        uke_label_cell.value = "Ukespoeng"
-        cell_updates.append(uke_label_cell)
-
-        # Skriv ukespoeng i kolonnene
-        for pidx, discord_id in enumerate(player_ids):
-            col_idx = start_col + pidx
-            cell_obj = await asyncio.to_thread(
-                sheet.cell, uke_total_row, col_idx
-            )
-            poeng = uke_poeng[pidx]
-            if str(cell_obj.value) != str(poeng):
-                cell_obj.value = str(poeng)
-                cell_updates.append(cell_obj)
-
         # --- Finn siste Sesongpoeng-rad for å hente forrige totalsum ---
         all_sheet_rows = await asyncio.to_thread(sheet.get_all_values)
         forrige_sesong_row = None
