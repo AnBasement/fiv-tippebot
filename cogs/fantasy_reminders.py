@@ -155,7 +155,7 @@ class FantasyReminders(commands.Cog):
 
         # Preview: Ukens kamper (Uke next_week)
         msg.append("")
-        msg.append(f"**Ukens kamper (Uke {next_week}):**")
+        msg.append(f"**Neste ukes kamper (Uke {next_week}):**")
         preview_boxes = league.box_scores(week=next_week)
         for box in preview_boxes:
             home, away = box.home_team, box.away_team
