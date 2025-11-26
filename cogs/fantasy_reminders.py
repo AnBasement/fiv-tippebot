@@ -1,12 +1,17 @@
+"""
+Cog som sender påminnelser og ukentlige oppsummeringer til den valgte kanalen
+"""
+
 import asyncio
 from datetime import datetime, timedelta
+from typing import Optional, Tuple
+import logging
 import pytz
 from discord.ext import commands
 import discord
+from discord.ext.commands import Bot
 from data.channel_ids import PREIK_KANAL
 from core.utils.espn_helpers import get_league
-import logging
-from discord.ext.commands import Bot
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +49,11 @@ class FantasyReminders(commands.Cog):
         return last, length
 
     async def build_matchup_digest(self, channel):
+        """
+        Lager og sender en ukentlig meldig som oppsummerer uken som var,
+        inkludert høydepunkter, presenterer seier- og tapsrekker,
+        og poster kampene i den kommende uken.
+        """
         league = get_league()
         current_week = league.current_week
         last_week = max(1, current_week - 1)
@@ -56,12 +66,12 @@ class FantasyReminders(commands.Cog):
         recap_boxes = league.box_scores(week=last_week)
 
         recap_lines = []
-        nailbiter = None
-        toppscorer = None
-        lavest = None
-        bench_award = None
-        overachiever = None
-        underachiever = None
+        nailbiter: Optional[Tuple[float, str]] = None
+        toppscorer: Optional[Tuple[float, str]] = None
+        lavest: Optional[Tuple[float, str]] = None
+        bench_award: Optional[Tuple[float, str]] = None
+        overachiever: Optional[Tuple[float, str]] = None
+        underachiever: Optional[Tuple[float, str]] = None
         for box in recap_boxes:
             home, away = box.home_team, box.away_team
             hs, ascore = box.home_score, box.away_score
@@ -81,15 +91,24 @@ class FantasyReminders(commands.Cog):
                 )
             recap_lines.append(line)
             margin = abs(hs - ascore)
-            if nailbiter is None or margin < nailbiter[0]:
+            if nailbiter is None:
+                nailbiter = (
+                    margin,
+                    f"{home.team_name} vs {away.team_name} (margin {margin:.2f})",
+                )
+            elif margin < nailbiter[0]:
                 nailbiter = (
                     margin,
                     f"{home.team_name} vs {away.team_name} (margin {margin:.2f})",
                 )
             for team, score in [(home, hs), (away, ascore)]:
-                if toppscorer is None or score > toppscorer[0]:
+                if toppscorer is None:
                     toppscorer = (score, f"{team.team_name} med {score:.2f} poeng")
-                if lavest is None or score < lavest[0]:
+                elif score > toppscorer[0]:
+                    toppscorer = (score, f"{team.team_name} med {score:.2f} poeng")
+                if lavest is None:
+                    lavest = (score, f"{team.team_name} med {score:.2f} poeng")
+                elif score < lavest[0]:
                     lavest = (score, f"{team.team_name} med {score:.2f} poeng")
 
             # Poeng på benken (slot_position BE)
@@ -99,7 +118,12 @@ class FantasyReminders(commands.Cog):
             home_bench = bench_points(box.home_lineup)
             away_bench = bench_points(box.away_lineup)
             for team, bench_sum in [(home, home_bench), (away, away_bench)]:
-                if bench_award is None or bench_sum > bench_award[0]:
+                if bench_award is None:
+                    bench_award = (
+                        bench_sum,
+                        f"{team.team_name} med {bench_sum:.2f} poeng på benken",
+                    )
+                elif bench_sum > bench_award[0]:
                     bench_award = (
                         bench_sum,
                         f"{team.team_name} med {bench_sum:.2f} poeng på benken",
@@ -111,12 +135,22 @@ class FantasyReminders(commands.Cog):
                 (away, ascore, box.away_projected),
             ]:
                 diff = actual - projected if projected not in (None, -1) else actual
-                if overachiever is None or diff > overachiever[0]:
+                if overachiever is None:
                     overachiever = (
                         diff,
                         f"{team.team_name} overpresterte med {diff:.2f} mot proj.",
                     )
-                if underachiever is None or diff < underachiever[0]:
+                elif diff > overachiever[0]:
+                    overachiever = (
+                        diff,
+                        f"{team.team_name} overpresterte med {diff:.2f} mot proj.",
+                    )
+                if underachiever is None:
+                    underachiever = (
+                        diff,
+                        f"{team.team_name} underpresterte med {diff:.2f} mot proj.",
+                    )
+                elif diff < underachiever[0]:
                     underachiever = (
                         diff,
                         f"{team.team_name} underpresterte med {diff:.2f} mot proj.",
@@ -130,17 +164,17 @@ class FantasyReminders(commands.Cog):
         # Ukespriser/høydepunkter
         msg.append("")
         msg.append("**Ukespriser:**")
-        if nailbiter:
+        if nailbiter is not None:
             msg.append(f"- Ukens neglebiter: {nailbiter[1]}")
-        if toppscorer:
+        if toppscorer is not None:
             msg.append(f"- Toppscorer: {toppscorer[1]}")
-        if lavest:
+        if lavest is not None:
             msg.append(f"- Bunnsuger: {lavest[1]}")
-        if bench_award:
+        if bench_award is not None:
             msg.append(f"- Benkesliteren: {bench_award[1]}")
-        if overachiever:
+        if overachiever is not None:
             msg.append(f"- Overpresterte: {overachiever[1]}")
-        if underachiever:
+        if underachiever is not None:
             msg.append(f"- Underpresterte: {underachiever[1]}")
 
         # Streaks (3+)
@@ -215,7 +249,7 @@ class FantasyReminders(commands.Cog):
             channel = self.bot.get_channel(PREIK_KANAL)
             if not isinstance(channel, discord.TextChannel):
                 logger.warning(
-                    f"Fant ikke tekstkanal med id {PREIK_KANAL}, prøver igjen om 30s"
+                    "Fant ikke tekstkanal med id %s, prøver igjen om 30s", PREIK_KANAL
                 )
                 await asyncio.sleep(30)
 
@@ -245,8 +279,9 @@ class FantasyReminders(commands.Cog):
                             await self.build_matchup_digest(channel)
                             self.last_waiver_week = week_num
                             logger.info(
-                                f"Tirsdagspåminnelse sendt for uke {week_num} "
-                                f"({reminder_time})"
+                                "Tirsdagspåminnelse sendt for uke %s (%s)",
+                                week_num,
+                                reminder_time,
                             )
 
                     tomorrow: datetime = reminder_time + timedelta(days=1)
@@ -267,8 +302,8 @@ class FantasyReminders(commands.Cog):
                 sleep_seconds: float = (next_tuesday - now).total_seconds()
                 await asyncio.sleep(sleep_seconds)
 
-            except Exception as e:
-                logger.error(f"Feil i FantasyReminders: {e}. Prøver igjen om 5 min.")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Feil i FantasyReminders: %s. Prøver igjen om 5 min.", e)
                 await asyncio.sleep(300)
 
 

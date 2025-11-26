@@ -9,17 +9,18 @@ inkludert:
 - Automatiske påminnelser for tipping på torsdager og søndager
 """
 
+from datetime import datetime, timedelta
+import re
+import asyncio
+import logging
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
 import aiohttp
 from aiohttp import ClientTimeout
-from datetime import datetime, timedelta
 import pytz
-import re
-import asyncio
-import logging
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
+from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 from core.errors import (
     APIFetchError,
@@ -28,7 +29,6 @@ from core.errors import (
     ResultaterError,
 )
 from core.decorators import admin_only
-from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
@@ -118,14 +118,15 @@ class VestskTipping(commands.Cog):
         """
         id_row = sheet.row_values(2)
         players = {id_row[i]: i for i in range(1, len(id_row)) if id_row[i]}
-        logger.debug(f"get_players: {players}")
+        logger.debug("get_players: %s", players)
         return players
 
-    def cog_unload(self):
+    async def cog_unload(self):
         self.reminder_task.cancel()
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
+        """Sender en vennlig feilmelding til brukere som ikke har tilgang."""
         if isinstance(error, CheckFailure):
             await ctx.send(
                 "Kanskje hvis du spør veldig pent så kan du få lov te å "
@@ -137,6 +138,7 @@ class VestskTipping(commands.Cog):
     @commands.command()
     @admin_only()
     async def kamper(self, ctx, uke: int | None = None):
+        """Lister ukens NFL-kamper (eller valgt uke) i kanalen."""
         await self._kamper_impl(ctx, uke)
 
     async def _kamper_impl(self, ctx, uke: int | None = None):
@@ -163,7 +165,7 @@ class VestskTipping(commands.Cog):
                     await asyncio.sleep(5)
                     async with session.get(url) as resp:
                         data = await resp.json()
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             raise APIFetchError(url, e) from e
 
         events = data.get("events", [])
@@ -188,6 +190,7 @@ class VestskTipping(commands.Cog):
             await kanal.send(f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
 
     async def reminder_scheduler(self):
+        """Bakgrunnsloop for torsdag/søndag-påminnelser i PREIK."""
         await self.bot.wait_until_ready()
         channel = self.bot.get_channel(PREIK_KANAL)
 
@@ -219,8 +222,9 @@ class VestskTipping(commands.Cog):
                             )
                             self.last_reminder_week = week_num
                             logger.info(
-                                f"Torsdagspåminnelse sendt for uke {week_num} "
-                                f"({reminder_time})"
+                                "Torsdagspåminnelse sendt for uke %s (%s)",
+                                week_num,
+                                reminder_time,
                             )
 
                         tomorrow = reminder_time + timedelta(days=1)
@@ -253,10 +257,10 @@ class VestskTipping(commands.Cog):
                                 await asyncio.sleep(5)
                                 async with session.get(url) as resp:
                                     data = await resp.json()
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
                         logger.error(
-                            f"Kunne ikke hente data fra ESPN API: {e}. "
-                            "Prøver igjen om 5 min."
+                            "Kunne ikke hente data fra ESPN API: %s. Prøver igjen om 5 min.",
+                            e,
                         )
                         await asyncio.sleep(300)  # backoff før retry
                         continue
@@ -291,9 +295,9 @@ class VestskTipping(commands.Cog):
                                 )
                                 self.last_reminder_sunday = first_sunday_game.date()
                                 logger.info(
-                                    "Søndagspåminnelse sendt for "
-                                    f"{first_sunday_game.date()} "
-                                    f"({reminder_time})"
+                                    "Søndagspåminnelse sendt for %s (%s)",
+                                    first_sunday_game.date(),
+                                    reminder_time,
                                 )
 
                             tomorrow = reminder_time + timedelta(days=1)
@@ -321,8 +325,8 @@ class VestskTipping(commands.Cog):
                 sleep_seconds = (sleep_until - now).total_seconds()
                 await asyncio.sleep(sleep_seconds)
 
-            except Exception as e:
-                logger.error(f"Feil i reminder_scheduler: {e}. Prøver igjen om 5 min.")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e)
                 await asyncio.sleep(300)
 
     def _format_event(self, ev):
@@ -345,9 +349,12 @@ class VestskTipping(commands.Cog):
     @commands.command(name="eksporter")
     @admin_only()
     async def export(self, ctx, uke: int | None = None):
+        """Eksporterer siste kamp-postinger til Google Sheet."""
         await self._export_impl(ctx, uke)
 
-    async def _export_impl(self, ctx, uke: int | None = None):
+    async def _export_impl(
+        self, ctx, uke: int | None = None
+    ):  # pylint: disable=unused-argument
         try:
             sheet = await asyncio.wait_for(
                 asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
@@ -355,8 +362,8 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
         channel = ctx.channel
 
@@ -435,16 +442,16 @@ class VestskTipping(commands.Cog):
             values.append(row)
 
         try:
-            all_rows_colA = await asyncio.wait_for(
+            all_rows_col_a = await asyncio.wait_for(
                 asyncio.to_thread(sheet.col_values, 1), timeout=10
             )
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
-        last_data_row = len(all_rows_colA)
+        last_data_row = len(all_rows_col_a)
         start_row = last_data_row + 2
 
         if values:
@@ -459,8 +466,8 @@ class VestskTipping(commands.Cog):
                 except asyncio.TimeoutError:
                     logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
                     return
-                except Exception as e:
-                    logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
                     return
                 flat_values = [cell for row in values for cell in row]
                 for cell_obj, val in zip(cell_range, flat_values):
@@ -472,8 +479,8 @@ class VestskTipping(commands.Cog):
                 except asyncio.TimeoutError:
                     logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
                     return
-                except Exception as e:
-                    logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
                     return
             except Exception as e:
                 raise ExportError(
@@ -489,7 +496,7 @@ class VestskTipping(commands.Cog):
     @admin_only()
     async def resultater(self, ctx, uke: int | None = None):
         """Kommando for å vise resultater for en uke."""
-        logger.info(f"Kommando !resultater kjørt for uke={uke}")
+        logger.info("Kommando !resultater kjørt for uke=%s", uke)
         await self._resultater_impl(ctx, uke)
 
     async def _resultater_impl(self, ctx, uke: int | None = None):
@@ -499,22 +506,24 @@ class VestskTipping(commands.Cog):
             )
             if not sheet:
                 raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
-        except asyncio.TimeoutError:
-            raise ResultaterError("Timeout ved åpning av sheet 'Vestsk Tipping'")
-        except Exception as e:
+        except asyncio.TimeoutError as exc:
+            raise ResultaterError(
+                "Timeout ved åpning av sheet 'Vestsk Tipping'"
+            ) from exc
+        except Exception as e:  # pylint: disable=broad-exception-caught
             raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
 
-        logger.debug(f"Henter sheet: {sheet.title if sheet else 'None'}")
+        logger.debug("Henter sheet: %s", sheet.title if sheet else "None")
 
         norsk_tz = pytz.timezone("Europe/Oslo")
         now = datetime.now(norsk_tz)
         season = now.year if now.month >= 3 else now.year - 1
-        logger.debug(f"Sesong: {season}")
+        logger.debug("Sesong: %s", season)
 
         url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/" "scoreboard"
         if uke:
             url += f"?dates={season}&seasontype=2&week={uke}"
-        logger.debug(f"Henter URL: {url}")
+        logger.debug("Henter URL: %s", url)
 
         try:
             async with aiohttp.ClientSession(
@@ -532,10 +541,10 @@ class VestskTipping(commands.Cog):
                     async with session.get(url) as resp:
                         data = await resp.json()
         except Exception as e:
-            raise APIFetchError(url, e)
+            raise APIFetchError(url, e) from e
 
         events = data.get("events", [])
-        logger.debug(f"Antall events hentet: {len(events)}")
+        logger.debug("Antall events hentet: %s", len(events))
 
         if not events:
             raise NoEventsFoundError(uke)
@@ -569,10 +578,10 @@ class VestskTipping(commands.Cog):
                 kamp_resultater[kampkode] = away_team
             else:
                 kamp_resultater[kampkode] = "Uavgjort"
-        logger.debug(f"Kampresultater: {kamp_resultater}")
+        logger.debug("Kampresultater: %s", kamp_resultater)
 
         players = self.get_players(sheet)
-        logger.debug(f"Spillere funnet: {players}")
+        logger.debug("Spillere funnet: %s", players)
         num_players = len(players)
 
         # Hent alle relevante rader og kolonner i én batch
@@ -584,8 +593,8 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
         sheet_kamper = []
         row_mapping = {}
@@ -596,14 +605,14 @@ class VestskTipping(commands.Cog):
                 sheet_kamper.append(kampkode)
                 row_mapping[len(sheet_kamper) - 1] = i
 
-        logger.debug(f"Kamper i sheet: {sheet_kamper}")
-        logger.debug(f"Row mapping: {row_mapping}")
+        logger.debug("Kamper i sheet: %s", sheet_kamper)
+        logger.debug("Row mapping: %s", row_mapping)
 
         # Finn raden rett etter siste kamp for denne uken
         uke_total_row = max(row_mapping.values(), default=3) + 1
         sesong_total_row = uke_total_row + 1
         logger.debug(
-            f"Uke total rad: {uke_total_row}, " f"sesong total rad: {sesong_total_row}"
+            "Uke total rad: %s, sesong total rad: %s", uke_total_row, sesong_total_row
         )
 
         green = green_format()
@@ -630,8 +639,8 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
 
         # Lag mapping: (row_idx, col_idx) -> cell_obj
@@ -644,10 +653,10 @@ class VestskTipping(commands.Cog):
             row_idx = row_mapping[idx]
             riktig_vinner = kamp_resultater.get(kampkode)
             logger.debug(
-                f"Prosesserer kamp {kampkode} (riktig vinner: {riktig_vinner})"
+                "Prosesserer kamp %s (riktig vinner: %s)", kampkode, riktig_vinner
             )
 
-            for pidx, discord_id in enumerate(player_ids):
+            for pidx, _ in enumerate(player_ids):
                 col_idx = start_col + pidx
                 cell_obj = cell_map.get((row_idx, col_idx))
                 if cell_obj is None:
@@ -655,9 +664,10 @@ class VestskTipping(commands.Cog):
                 cell_value = cell_obj.value
 
                 logger.debug(
-                    f"Kampkode={kampkode}, riktig_vinner={riktig_vinner}, "
-                    "teams="
-                    + str([(v.get("short"), v.get("name")) for v in teams.values()])
+                    "Kampkode=%s, riktig_vinner=%s, teams=%s",
+                    kampkode,
+                    riktig_vinner,
+                    [(v.get("short"), v.get("name")) for v in teams.values()],
                 )
 
                 gyldige_svar = (
@@ -688,7 +698,7 @@ class VestskTipping(commands.Cog):
                     cell_updates.append(cell_obj)
                 format_updates.append((row_idx, col_idx, fmt))
 
-        logger.info(f"Ukespoeng: {uke_poeng}")
+        logger.info("Ukespoeng: %s", uke_poeng)
 
         # --- Sett inn Ukespoeng på ny rad etter denne ukens kamper ---
         # Skriv "Ukespoeng" i kolA
@@ -701,12 +711,12 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
 
         # Skriv ukespoeng i kolonnene
-        for pidx, discord_id in enumerate(player_ids):
+        for pidx, _ in enumerate(player_ids):
             col_idx = start_col + pidx
             try:
                 cell_obj = await asyncio.wait_for(
@@ -715,8 +725,8 @@ class VestskTipping(commands.Cog):
             except asyncio.TimeoutError:
                 logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
                 return
-            except Exception as e:
-                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
                 return
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
@@ -731,8 +741,8 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
         forrige_sesong_row = None
         for i, row in enumerate(all_sheet_rows, start=1):
@@ -749,11 +759,11 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
 
-        for pidx, discord_id in enumerate(player_ids):
+        for pidx, _ in enumerate(player_ids):
             col_idx = start_col + pidx
             tidligere_total = 0
             if forrige_sesong_row:
@@ -769,8 +779,8 @@ class VestskTipping(commands.Cog):
             except asyncio.TimeoutError:
                 logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
                 return
-            except Exception as e:
-                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
                 return
             if str(cell_obj.value) != str(ny_total):
                 cell_obj.value = str(ny_total)
@@ -786,9 +796,6 @@ class VestskTipping(commands.Cog):
                 logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
                 return
             except Exception as e:
-                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
-                return
-            except Exception as e:
                 raise ResultaterError(
                     f"Feil ved batch-oppdatering av celler: {e}"
                 ) from e
@@ -797,9 +804,9 @@ class VestskTipping(commands.Cog):
         # Bruk green_format/red_format/yellow_format for batchUpdate.
         # Finn sheetId for arket
         try:
-            sheet_id = sheet._properties["sheetId"]
-        except Exception as e:
-            raise ResultaterError(f"Kunne ikke hente sheetId: {e}")
+            sheet_id = sheet.id  # type: ignore[attr-defined]
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            raise ResultaterError(f"Kunne ikke hente sheetId: {e}") from e
 
         # Lag batchUpdate-requests for alle celler som skal formateres
         requests = []
@@ -833,7 +840,9 @@ class VestskTipping(commands.Cog):
                     timeout=10,
                 )
             except Exception as e:
-                raise ResultaterError(f"Feil ved batch-formattering av celler: {e}")
+                raise ResultaterError(
+                    f"Feil ved batch-formattering av celler: {e}"
+                ) from e
 
         logger.info("Ferdig med oppdatering av sheet, sender Discord-melding")
 
@@ -846,8 +855,8 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
             return
-        except Exception as e:
-            logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
             return
 
         discord_msg = []
@@ -861,8 +870,8 @@ class VestskTipping(commands.Cog):
             except asyncio.TimeoutError:
                 logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
                 return
-            except Exception as e:
-                logger.error(f"Kunne ikke åpne sheet Vestsk Tipping: {e}")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
                 return
             sesong_p = (
                 int(sesong_p_cell)

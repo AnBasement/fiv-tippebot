@@ -46,7 +46,7 @@ def get_creds() -> ServiceAccountCredentials:
     except Exception as e:
         raise MissingCredentialsError(
             f"Feil ved lesing av credentials {keyfile}: {str(e)}"
-        )
+        ) from e
 
 
 def get_client() -> Client:
@@ -65,7 +65,9 @@ def get_client() -> Client:
     except MissingCredentialsError:
         raise
     except Exception as e:
-        raise ClientAuthorizationError(f"Kunne ikke autorisere mot Google: {str(e)}")
+        raise ClientAuthorizationError(
+            f"Kunne ikke autorisere mot Google: {str(e)}"
+        ) from e
 
 
 def get_sheet(sheet_name: str, worksheet_index: int = 0) -> Worksheet:
@@ -89,11 +91,11 @@ def get_sheet(sheet_name: str, worksheet_index: int = 0) -> Worksheet:
     except gspread.SpreadsheetNotFound:
         raise SheetNotFoundError(
             sheet_name, worksheet_index, f"Fant ikke dokumentet '{sheet_name}'"
-        )
+        ) from None
     except Exception as e:
         raise SheetNotFoundError(
             sheet_name, worksheet_index, f"Feil ved åpning av dokument: {str(e)}"
-        )
+        ) from e
 
 
 def format_cell(
@@ -111,7 +113,7 @@ def format_cell(
         col_letter = chr(64 + col)  # Konverterer kolonnenummer til bokstav
         cell_range = f"{col_letter}{row}"
         format_cell_range(sheet, cell_range, color_fmt)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         # Logger feilen men lar den fortsette siden formatering ikke er kritisk
         print(f"Advarsel: Kunne ikke formatere celle {col_letter}{row}: {str(e)}")
 

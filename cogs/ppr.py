@@ -10,11 +10,11 @@ oppdaterte rangeringer i Discord.
 import logging
 import asyncio
 from typing import Dict, List, Any
+import os
 from discord.ext import commands
 from core.errors import PPRFetchError, PPRSnapshotError
 from cogs.sheets import get_client
 from data.brukere import TEAM_NAMES
-import os
 
 # Sett opp logging
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class PPR(commands.Cog):
             self.sheet = get_client().open("Fest i Vest")
             logger.info("PPR Cog: Tilkoblet Google Sheets")
         except Exception as e:
-            logger.error(f"PPR Cog: Kunne ikke koble til Google Sheets: {e}")
+            logger.error("PPR Cog: Kunne ikke koble til Google Sheets: %s", e)
             raise
 
     async def _get_players(self, season: str = "2025") -> List[Dict[str, Any]]:
@@ -73,13 +73,13 @@ class PPR(commands.Cog):
         ]
 
         players = []
-        logger.info(f"Henter PPR-data for sesong {season}")
+        logger.info("Henter PPR-data for sesong %s", season)
 
         for ws in self.sheet.worksheets():
             if ws.title not in target_names:
                 continue
 
-            logger.debug(f"Prosesserer ark: {ws.title}")
+            logger.debug("Prosesserer ark: %s", ws.title)
             try:
                 rows = await asyncio.wait_for(
                     asyncio.to_thread(ws.get_all_values), timeout=10
@@ -90,17 +90,17 @@ class PPR(commands.Cog):
                         target_row = i
                         break
 
-                if target_row:
-                    try:
-                        ppr_value = float(rows[target_row - 1][1])  # B = indeks 1
-                        players.append({"team": ws.title, "ppr": ppr_value})
-                        logger.debug(f"PPR for {ws.title}: {ppr_value}")
-                    except ValueError as e:
-                        raise PPRFetchError(
-                            ws.title,
-                            season,
-                            f"Ugyldig PPR-verdi i rad {target_row}: {str(e)}",
-                        )
+                    if target_row:
+                        try:
+                            ppr_value = float(rows[target_row - 1][1])  # B = indeks 1
+                            players.append({"team": ws.title, "ppr": ppr_value})
+                            logger.debug("PPR for %s: %s", ws.title, ppr_value)
+                        except ValueError as e:
+                            raise PPRFetchError(
+                                ws.title,
+                                season,
+                                f"Ugyldig PPR-verdi i rad {target_row}: {str(e)}",
+                            ) from e
                 else:
                     raise PPRFetchError(
                         ws.title, season, f"Fant ingen rad for sesong {season}"
@@ -109,9 +109,9 @@ class PPR(commands.Cog):
             except Exception as e:
                 raise PPRFetchError(
                     ws.title, season, f"Feil ved lesing av ark: {str(e)}"
-                )
+                ) from e
 
-        logger.info(f"Hentet PPR-data for {len(players)} spillere")
+        logger.info("Hentet PPR-data for %s spillere", len(players))
         return players
 
     async def _save_snapshot(self, players: List[Dict[str, Any]]) -> None:
@@ -131,7 +131,7 @@ class PPR(commands.Cog):
         try:
             history_ws = self.sheet.worksheet("PPR-historikk")
             logger.debug("Fant eksisterende PPR-historikk ark")
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.info("Oppretter nytt PPR-historikk ark")
             history_ws = self.sheet.add_worksheet(
                 title="PPR-historikk", rows=1000, cols=10
@@ -147,10 +147,10 @@ class PPR(commands.Cog):
             return
 
         try:
-            all_rows_colA = await asyncio.wait_for(
+            all_rows_col_a = await asyncio.wait_for(
                 asyncio.to_thread(history_ws.col_values, 1), timeout=10
             )
-            start_row = len(all_rows_colA) + 1
+            start_row = len(all_rows_col_a) + 1
             num_rows = len(rows_to_add)
             num_cols = len(rows_to_add[0])
 
@@ -167,10 +167,10 @@ class PPR(commands.Cog):
             await asyncio.wait_for(
                 asyncio.to_thread(history_ws.update_cells, cell_range), timeout=10
             )
-            logger.info(f"Lagret snapshot med {num_rows} PPR-verdier")
+            logger.info("Lagret snapshot med %s PPR-verdier", num_rows)
 
         except Exception as e:
-            raise PPRSnapshotError(f"Kunne ikke lagre PPR snapshot: {str(e)}")
+            raise PPRSnapshotError(f"Kunne ikke lagre PPR snapshot: {str(e)}") from e
 
     @commands.command(name="ppr")
     @commands.check(
@@ -195,12 +195,12 @@ class PPR(commands.Cog):
                 rows = await asyncio.wait_for(
                     asyncio.to_thread(history_ws.get_all_values), timeout=10
                 )
-                logger.debug(f"Hentet {len(rows)} historiske PPR-verdier")
-            except Exception as e:
+                logger.debug("Hentet %s historiske PPR-verdier", len(rows))
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"[DEBUG] Kunne ikke åpne PPR-historikk: {e}")
                 rows = []
         except Exception as e:
-            logger.error(f"Feil ved henting av PPR-data: {str(e)}")
+            logger.error("Feil ved henting av PPR-data: %s", str(e))
             raise
 
         last_snapshot = {}
@@ -255,4 +255,9 @@ class PPR(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
+    """Setter opp cog-en i Discord bot-instansen.
+
+    Args:
+        bot (Bot): Discord bot-instansen som skal få cog-en
+    """
     await bot.add_cog(PPR(bot))
