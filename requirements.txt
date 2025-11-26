@@ -10,3 +10,4 @@ pytest
 pytest-asyncio
 asynctest
 black
+espn_api
