@@ -36,16 +36,17 @@ def get_creds() -> ServiceAccountCredentials:
     Raises:
         MissingCredentialsError: Hvis credentials.json-filen ikke finnes.
     """
-    if not os.path.exists("credentials.json"):
+    keyfile = os.getenv("GOOGLE_SHEETS_KEYFILE", "credentials.json")
+    if not os.path.exists(keyfile):
         raise MissingCredentialsError(
-            "Kunne ikke finne credentials.json i prosjektmappen"
+            f"Kunne ikke finne credentials-filen: {keyfile}"
         )
     try:
         return ServiceAccountCredentials.from_json_keyfile_name(
-            "credentials.json", scope  # type: ignore
+            keyfile, scope  # type: ignore
         )
     except Exception as e:
-        raise MissingCredentialsError(f"Feil ved lesing av credentials.json: {str(e)}")
+        raise MissingCredentialsError(f"Feil ved lesing av credentials {keyfile}: {str(e)}")
 
 
 def get_client() -> Client:
