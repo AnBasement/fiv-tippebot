@@ -47,7 +47,7 @@ class FantasyReminders(commands.Cog):
         league = get_league()
         current_week = league.current_week
         last_week = max(1, current_week - 1)
-        next_week = current_week 
+        next_week = current_week
 
         msg = []
 
@@ -76,11 +76,16 @@ class FantasyReminders(commands.Cog):
                     f"**{away.team_name} ({ascore:.2f})**"
                 )
             else:
-                line = f"- {home.team_name} ({hs:.2f}) – {away.team_name} ({ascore:.2f})"
+                line = (
+                    f"- {home.team_name} ({hs:.2f}) – {away.team_name} ({ascore:.2f})"
+                )
             recap_lines.append(line)
             margin = abs(hs - ascore)
             if nailbiter is None or margin < nailbiter[0]:
-                nailbiter = (margin, f"{home.team_name} vs {away.team_name} (margin {margin:.2f})")
+                nailbiter = (
+                    margin,
+                    f"{home.team_name} vs {away.team_name} (margin {margin:.2f})",
+                )
             for team, score in [(home, hs), (away, ascore)]:
                 if toppscorer is None or score > toppscorer[0]:
                     toppscorer = (score, f"{team.team_name} med {score:.2f} poeng")
@@ -95,7 +100,10 @@ class FantasyReminders(commands.Cog):
             away_bench = bench_points(box.away_lineup)
             for team, bench_sum in [(home, home_bench), (away, away_bench)]:
                 if bench_award is None or bench_sum > bench_award[0]:
-                    bench_award = (bench_sum, f"{team.team_name} med {bench_sum:.2f} poeng på benken")
+                    bench_award = (
+                        bench_sum,
+                        f"{team.team_name} med {bench_sum:.2f} poeng på benken",
+                    )
 
             # Over/underprestert basert på projisert poeng
             for team, actual, projected in [
@@ -104,9 +112,15 @@ class FantasyReminders(commands.Cog):
             ]:
                 diff = actual - projected if projected not in (None, -1) else actual
                 if overachiever is None or diff > overachiever[0]:
-                    overachiever = (diff, f"{team.team_name} overpresterte med {diff:.2f} mot proj.")
+                    overachiever = (
+                        diff,
+                        f"{team.team_name} overpresterte med {diff:.2f} mot proj.",
+                    )
                 if underachiever is None or diff < underachiever[0]:
-                    underachiever = (diff, f"{team.team_name} underpresterte med {diff:.2f} mot proj.")
+                    underachiever = (
+                        diff,
+                        f"{team.team_name} underpresterte med {diff:.2f} mot proj.",
+                    )
 
         if recap_lines:
             msg += recap_lines

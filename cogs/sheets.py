@@ -38,15 +38,15 @@ def get_creds() -> ServiceAccountCredentials:
     """
     keyfile = os.getenv("GOOGLE_SHEETS_KEYFILE", "credentials.json")
     if not os.path.exists(keyfile):
-        raise MissingCredentialsError(
-            f"Kunne ikke finne credentials-filen: {keyfile}"
-        )
+        raise MissingCredentialsError(f"Kunne ikke finne credentials-filen: {keyfile}")
     try:
         return ServiceAccountCredentials.from_json_keyfile_name(
             keyfile, scope  # type: ignore
         )
     except Exception as e:
-        raise MissingCredentialsError(f"Feil ved lesing av credentials {keyfile}: {str(e)}")
+        raise MissingCredentialsError(
+            f"Feil ved lesing av credentials {keyfile}: {str(e)}"
+        )
 
 
 def get_client() -> Client:

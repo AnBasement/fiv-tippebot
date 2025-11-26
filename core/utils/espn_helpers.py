@@ -5,6 +5,7 @@ Hjelpefunksjoner knyttet opp mot ESPNs API for fantasy
 import os
 from espn_api.football import League
 
+
 def get_league():
     """
     Henter informasjon om ligaen fra ESPNs API for fantasy football.
