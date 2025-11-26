@@ -48,6 +48,13 @@ async def on_command_error(ctx, error):
     # Ignorer kommandoer som ikke finnes
     if isinstance(error, commands.CommandNotFound):
         return
+    # Cooldown-meldinger til brukeren
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(
+            f"{ctx.author.mention} e ein liten pissemaur. STRAFFESHOT! "
+            f"(Prøv igjen om {error.retry_after:.1f} sekunder.)"
+        )
+        return
 
     # Sjekk om error er en BotError
     if isinstance(error, BotError):

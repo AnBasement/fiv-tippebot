@@ -1,5 +1,5 @@
 # Global cooldown for å unngå spam av kommandoer
-import time
+
 from discord.ext import commands
 
 
@@ -34,17 +34,4 @@ def setup_global_cooldown(bot, rate=1, per=5):
             )
         return True
 
-    @bot.event
-    async def on_command_error(ctx, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            now = time.time()
-            uid = ctx.author.id
-            if uid not in last_warned or now - last_warned[uid] > per:
-                last_warned[uid] = now
-                await ctx.send(
-                    f"{ctx.author.mention} e ein liten pissemaur. "
-                    f"STRAFFESHOT! "
-                    f"(Prøv igjen om {error.retry_after:.1f} sekunder.)"
-                )
-        else:
-            raise error
+    # Merk: on_command_error håndteres nå sentralt i core/bot.py
