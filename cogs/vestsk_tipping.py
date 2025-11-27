@@ -9,15 +9,17 @@ inkludert:
 - Automatiske påminnelser for tipping på torsdager og søndager
 """
 
-from datetime import datetime, timedelta
-import re
+# pylint: disable=import-error,too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
+
 import asyncio
+from datetime import datetime, timedelta
 import logging
-from discord.ext import commands
-from discord.ext.commands import CheckFailure
+import re
 import aiohttp
 from aiohttp import ClientTimeout
 import pytz
+from discord.ext import commands
+from discord.ext.commands import CheckFailure
 
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
 from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
@@ -33,6 +35,8 @@ from core.decorators import admin_only
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 
 
 def parse_espn_date(datestr: str) -> datetime:
@@ -144,13 +148,9 @@ class VestskTipping(commands.Cog):
     async def _kamper_impl(self, ctx, uke: int | None = None):
         now = datetime.now()
         season = now.year if now.month >= 3 else now.year - 1
-        base_url = (
-            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/" "scoreboard"
-        )
+        url = SCOREBOARD_URL
         if uke:
-            url = f"{base_url}?dates={season}&seasontype=2&week={uke}"
-        else:
-            url = base_url
+            url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
         try:
             async with aiohttp.ClientSession(
                 timeout=ClientTimeout(total=10)
@@ -520,9 +520,9 @@ class VestskTipping(commands.Cog):
         season = now.year if now.month >= 3 else now.year - 1
         logger.debug("Sesong: %s", season)
 
-        url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/" "scoreboard"
+        url = SCOREBOARD_URL
         if uke:
-            url += f"?dates={season}&seasontype=2&week={uke}"
+            url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
         logger.debug("Henter URL: %s", url)
 
         try:

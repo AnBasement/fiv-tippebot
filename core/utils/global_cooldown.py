@@ -1,4 +1,4 @@
-# Global cooldown for å unngå spam av kommandoer
+"""Global cooldown for å unngå spam av kommandoer"""
 
 from discord.ext import commands
 
@@ -17,7 +17,6 @@ def setup_global_cooldown(bot, rate=1, per=5):
     cooldown = commands.CooldownMapping.from_cooldown(
         rate, per, commands.BucketType.user
     )
-    last_warned = {}
 
     @bot.check
     async def global_cooldown(ctx: commands.Context):
@@ -26,11 +25,8 @@ def setup_global_cooldown(bot, rate=1, per=5):
             return True
         retry_after = bucket.update_rate_limit()
         if retry_after:
-            cooldown_obj = cooldown._cooldown
-            if cooldown_obj is None:
-                return True
             raise commands.CommandOnCooldown(
-                cooldown_obj, retry_after, commands.BucketType.user
+                bucket.cooldown, retry_after, commands.BucketType.user
             )
         return True
 

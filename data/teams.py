@@ -1,3 +1,5 @@
+"""Statisk liste over NFL-lag med emojis og korte navn."""
+
 # Teams og emojis
 teams = {
     "New England Patriots": {"emoji": "<:ne:752546616207999056>", "short": "Patriots"},

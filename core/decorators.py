@@ -1,3 +1,5 @@
+"""Dekorator som sjekker om en bruker har admin-tilgang når kommando blir sendt."""
+
 import os
 from discord.ext import commands
 
@@ -14,5 +16,5 @@ def admin_only():
     Raises:
         CheckFailure: Hvis brukeren ikke er admin
     """
-    ADMIN_IDS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
-    return commands.check(lambda ctx: str(ctx.author.id) in ADMIN_IDS)
+    admin_ids = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
+    return commands.check(lambda ctx: str(ctx.author.id) in admin_ids)

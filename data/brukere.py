@@ -1,3 +1,5 @@
+"""Bruker- og lagnavn-mapping for Fest i Vest."""
+
 TEAM_NAMES = {
     "Kristoffer": "Stavanger Unge Gutter",
     "Arild": "Wergeland Vipers",

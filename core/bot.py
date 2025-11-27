@@ -1,3 +1,5 @@
+"""Oppstart og hendelser for Discord-botten."""
+
 import os
 import asyncio
 import discord
@@ -39,12 +41,14 @@ COGS = [
 # === Events ===
 @bot.event
 async def on_ready():
+    """Logger til konsollen når botten er klar og pålogget."""
     print(f"✅ Botten er logget inn som {bot.user}")
 
 
 # --- Global error handler ---
 @bot.event
 async def on_command_error(ctx, error):
+    """Global feilhåndtering: sender admin-varsel og enkel feedback."""
     # Ignorer kommandoer som ikke finnes
     if isinstance(error, commands.CommandNotFound):
         return
@@ -74,14 +78,19 @@ async def on_command_error(ctx, error):
 
 # === Main async startup ===
 async def main():
+    """Starter flask keep_alive, laster cogs og starter botten."""
     keep_alive()  # starter Flask-serveren for uptime
     async with bot:
         for cog in COGS:
             try:
                 await bot.load_extension(cog)
                 print(f"[COG] Lastet {cog}")
-            except Exception as e:
+            except commands.ExtensionNotFound as e:
+                print(f"[COG] Ikke funnet: {cog} ({e})")
+            except commands.ExtensionFailed as e:
                 print(f"[COG] FEIL ved lasting av {cog}: {e}")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"[COG] Uventet feil ved lasting av {cog}: {e}")
 
         if TOKEN is None:
             raise ValueError("TOKEN ikke definert i miljøvariabler")

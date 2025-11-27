@@ -1,4 +1,4 @@
-# Håndterer errors
+"""Håndterer errors"""
 
 __all__ = (
     "BotError",
@@ -14,8 +14,6 @@ __all__ = (
 
 class BotError(Exception):
     """Grunnklasse for alle errors relatert til botten."""
-
-    pass
 
 
 class PPRFetchError(BotError):
@@ -52,8 +50,6 @@ class ResponseError(BotError):
 class SheetsError(BotError):
     """Grunnklasse for errors knyttet til Google Sheets."""
 
-    pass
-
 
 class MissingCredentialsError(SheetsError):
     """Raised når credentials.json mangler."""
@@ -88,8 +84,6 @@ class SheetNotFoundError(SheetsError):
 
 class VestskError(BotError):
     """Grunnklasse for errors knyttet til Vestsk Tipping-cogen."""
-
-    pass
 
 
 class APIFetchError(VestskError):
