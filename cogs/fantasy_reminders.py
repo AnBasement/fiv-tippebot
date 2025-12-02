@@ -261,7 +261,6 @@ class FantasyReminders(commands.Cog):
                 # === Tirsdagspåminnelse ===
                 if weekday == 1:  # tirsdag
                     week_num: int = now.isocalendar()[1]
-                    week_num = 1
                     reminder_time: datetime = now.replace(
                         hour=18, minute=0, second=0, microsecond=0
                     )
@@ -276,7 +275,13 @@ class FantasyReminders(commands.Cog):
                     ):
                         if channel:
                             await channel.send("@everyone Ikke glem waivers!")
-                            await self.build_matchup_digest(channel)
+                            try:
+                                await self.build_matchup_digest(channel)
+                            except Exception as exc:  # pylint: disable=broad-exception-caught
+                                logger.exception("Feil i matchup digest: %s", exc)
+                                await channel.send(
+                                    "Kunne ikke generere matchup-digest denne uken."
+                                )
                             self.last_waiver_week = week_num
                             logger.info(
                                 "Tirsdagspåminnelse sendt for uke %s (%s)",
