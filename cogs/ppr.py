@@ -71,12 +71,17 @@ class PPR(commands.Cog):
             "Edvard H",
             "Tor",
         ]
+        # Normaliser navn (små bokstaver, trim) for å matche ark med små avvik
+        target_names_normalized = {name.strip().lower(): name for name in target_names}
 
         players = []
         logger.info("Henter PPR-data for sesong %s", season)
+        ws_titles = [ws.title for ws in self.sheet.worksheets()]
+        logger.info("Fant ark: %s", ws_titles)
 
         for ws in self.sheet.worksheets():
-            if ws.title not in target_names:
+            ws_title_norm = ws.title.strip().lower()
+            if ws_title_norm not in target_names_normalized:
                 continue
 
             logger.debug("Prosesserer ark: %s", ws.title)
@@ -86,21 +91,21 @@ class PPR(commands.Cog):
                 )
                 target_row = None
                 for i, row in enumerate(rows, start=1):
-                    if row[0] == season:
+                    if row and row[0].strip() == season:
                         target_row = i
                         break
 
-                    if target_row:
-                        try:
-                            ppr_value = float(rows[target_row - 1][1])  # B = indeks 1
-                            players.append({"team": ws.title, "ppr": ppr_value})
-                            logger.debug("PPR for %s: %s", ws.title, ppr_value)
-                        except ValueError as e:
-                            raise PPRFetchError(
-                                ws.title,
-                                season,
-                                f"Ugyldig PPR-verdi i rad {target_row}: {str(e)}",
-                            ) from e
+                if target_row:
+                    try:
+                        ppr_value = float(rows[target_row - 1][1])  # B = indeks 1
+                        players.append({"team": ws.title, "ppr": ppr_value})
+                        logger.debug("PPR for %s: %s", ws.title, ppr_value)
+                    except ValueError as e:
+                        raise PPRFetchError(
+                            ws.title,
+                            season,
+                            f"Ugyldig PPR-verdi i rad {target_row}: {str(e)}",
+                        ) from e
                 else:
                     raise PPRFetchError(
                         ws.title, season, f"Fant ingen rad for sesong {season}"
@@ -245,8 +250,12 @@ class PPR(commands.Cog):
             msg_lines.append(line)
             print(f"[DEBUG] {line}")
 
+        if not msg_lines:
+            await ctx.send("@everyone, ukens PPR-oppdatering: Ingen data tilgjengelig.")
+            return
+
         msg = "\n".join(msg_lines)
-        await ctx.send(f"@everyone, ukens PPR-oppdatering:\n```text\n{msg}\n```")
+        await ctx.send(f"@everyone, ukens PPR-oppdatering:\n```\n{msg}\n```")
         await self._save_snapshot(players_sorted)
         print("[DEBUG] Snapshot lagret.")
 
