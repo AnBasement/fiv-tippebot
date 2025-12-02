@@ -1,10 +1,12 @@
-import pytest
+"""Tests for vestsk_tipping.py"""
+
 from unittest.mock import AsyncMock, MagicMock
+from datetime import datetime
+import pytest
+import pytz
 from cogs import sheets
 from cogs.vestsk_tipping import VestskTipping
 from core.errors import NoEventsFoundError, ExportError
-from datetime import datetime
-import pytz
 
 
 @pytest.fixture(autouse=True)

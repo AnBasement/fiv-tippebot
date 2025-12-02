@@ -1,23 +1,28 @@
-import pytest
+"""Tester for sheets.py"""
+
 from unittest.mock import patch, MagicMock
+import pytest
 from cogs import sheets
 from core.errors import MissingCredentialsError
 
 
-# Dummy Sheet for testing
 class DummySheet:
+    """Dummy-ark for å teste grunnleggende funksjoner."""
+
     def __init__(self):
         self.formatted_cells = []
 
-    def row_values(self, n):
+    def row_values(self, n):  # pylint: disable=unused-argument
+        """Returnerer en dummy-rad med tre verdier."""
         return ["Header", "123", "456"]
 
     def format_cell_range(self, cell_range, cell_format):
+        """Lagrer formateringen som ble bedt om."""
         self.formatted_cells.append((cell_range, cell_format))
 
 
 def test_get_creds_none(monkeypatch):
-    # Simuler at credentials.json ikke finnes
+    """Simulerer manglende credentials.json og forventer MissingCredentialsError."""
     monkeypatch.setattr("os.path.exists", lambda x: False)
     with pytest.raises(MissingCredentialsError) as exc_info:
         sheets.get_creds()
@@ -26,8 +31,9 @@ def test_get_creds_none(monkeypatch):
 
 
 def test_get_creds_returns_creds(monkeypatch):
+    """Sjekker at get_creds() returnerer creds når filen finnes."""
     class DummyCreds:
-        pass
+        """Dummy credentials-objekt for testing."""
 
     monkeypatch.setattr("os.path.exists", lambda x: True)
     monkeypatch.setattr(
@@ -39,6 +45,7 @@ def test_get_creds_returns_creds(monkeypatch):
 
 
 def test_get_client_none(monkeypatch):
+    """Sjekker at get_client() kan returnere None uten creds."""
     monkeypatch.setattr(sheets, "get_creds", lambda: None)
     monkeypatch.setattr("gspread.authorize", lambda creds: None)
 
@@ -47,6 +54,7 @@ def test_get_client_none(monkeypatch):
 
 
 def test_get_client_returns_client(monkeypatch):
+    """Sjekker at get_client() returnerer autorisert klient."""
     dummy_client = "client_instance"
     monkeypatch.setattr(sheets, "get_creds", lambda: "creds")
     monkeypatch.setattr(sheets.gspread, "authorize", lambda creds: dummy_client)
@@ -55,6 +63,7 @@ def test_get_client_returns_client(monkeypatch):
 
 
 def test_get_sheet(monkeypatch):
+    """Sjekker at get_sheet() åpner riktig dokument/worksheet."""
     dummy_sheet = MagicMock()
     dummy_client = MagicMock()
     dummy_client.open.return_value.get_worksheet.return_value = dummy_sheet
@@ -67,6 +76,7 @@ def test_get_sheet(monkeypatch):
 
 
 def test_format_cell_calls_format_cell_range():
+    """Sjekker at format_cell() kaller format_cell_range med riktig celle."""
     dummy_sheet = MagicMock()
     color_fmt = sheets.green_format()
 
@@ -77,12 +87,14 @@ def test_format_cell_calls_format_cell_range():
 
 
 def test_color_formats():
+    """Sjekker at farge-funksjonene returnerer gyldige dicts."""
     assert sheets.green_format() is not None
     assert sheets.red_format() is not None
     assert sheets.yellow_format() is not None
 
 
 def test_dummy_sheet_row_values():
+    """Sjekker at DummySheet.row_values() returnerer dummy-data."""
     sheet = DummySheet()
     values = sheet.row_values(1)
     assert values == ["Header", "123", "456"]

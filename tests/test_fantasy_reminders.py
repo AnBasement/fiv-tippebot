@@ -1,13 +1,14 @@
-import pytest
+"""Tester for fantasy_reminders.py"""
 from unittest.mock import AsyncMock, Mock, patch
 from datetime import datetime
+import pytest
 import pytz
 
 from cogs.fantasy_reminders import FantasyReminders, setup
 
 
-@pytest.fixture
-def mock_bot():
+@pytest.fixture(name="mock_bot")
+def fixture_mock_bot():
     """Mocker en Discord bot."""
     bot = Mock()
     bot.loop = Mock()
@@ -18,8 +19,8 @@ def mock_bot():
     return bot
 
 
-@pytest.fixture
-def mock_channel():
+@pytest.fixture(name="mock_channel")
+def fixture_mock_channel():
     """Mocker en Discord-kanal."""
     channel = Mock()
     channel.send = AsyncMock()
@@ -27,6 +28,7 @@ def mock_channel():
 
 
 class TestFantasyReminders:
+    """Tester for FantasyReminders-cogen."""
 
     def test_init(self, mock_bot):
         """Tester at FantasyReminders initialiseres riktig."""

@@ -1,5 +1,9 @@
-import pytest
+"""Globale test-fixtures for å mocke gspread/OAuth uten credentials."""
+
 from unittest.mock import MagicMock
+import pytest
+import oauth2client.service_account as sac
+import gspread
 
 
 @pytest.fixture(autouse=True)
@@ -8,17 +12,11 @@ def mock_gspread(monkeypatch):
     Mock Google Sheets-tilgang slik at tests kan kjøre uten credentials.json
     """
 
-    # Mock ServiceAccountCredentials
-    import oauth2client.service_account as sac
-
     monkeypatch.setattr(
         sac.ServiceAccountCredentials,
         "from_json_keyfile_name",
         lambda *a, **kw: MagicMock(),
     )
-
-    # Mock gspread
-    import gspread
 
     mock_client = MagicMock()
     mock_sheet = MagicMock()

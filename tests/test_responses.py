@@ -1,5 +1,7 @@
-import pytest
+"""Tester for responses.py."""
+
 from unittest.mock import AsyncMock, MagicMock
+import pytest
 from cogs.responses import Responses
 
 
