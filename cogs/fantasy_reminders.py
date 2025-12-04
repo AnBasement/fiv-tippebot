@@ -3,7 +3,7 @@ Cog som sender påminnelser og ukentlige oppsummeringer til den valgte kanalen
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 import logging
 import pytz
@@ -11,6 +11,7 @@ from discord.ext import commands
 import discord
 from discord.ext.commands import Bot
 from data.channel_ids import PREIK_KANAL
+from data.brukere import load_discord_ids
 from core.utils.espn_helpers import get_league
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,9 @@ class FantasyReminders(commands.Cog):
         self.bot: Bot = bot
         self.norsk_tz = pytz.timezone("Europe/Oslo")
         self.last_waiver_week: int | None = None
+        self.inactive_notified: set[tuple[int, str | int | None, str | None]] = set()
         self.bot.loop.create_task(self.reminder_scheduler())
+        self.bot.loop.create_task(self.inactive_alert_scheduler())
 
     def _current_streak(self, team):
         length = getattr(team, "streak_length", 0)
@@ -277,7 +280,9 @@ class FantasyReminders(commands.Cog):
                             await channel.send("@everyone Ikke glem waivers!")
                             try:
                                 await self.build_matchup_digest(channel)
-                            except Exception as exc:  # pylint: disable=broad-exception-caught
+                            except (
+                                Exception
+                            ) as exc:  # pylint: disable=broad-exception-caught
                                 logger.exception("Feil i matchup digest: %s", exc)
                                 await channel.send(
                                     "Kunne ikke generere matchup-digest denne uken."
@@ -310,6 +315,127 @@ class FantasyReminders(commands.Cog):
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error("Feil i FantasyReminders: %s. Prøver igjen om 5 min.", e)
                 await asyncio.sleep(300)
+
+    def _player_kickoff(self, player) -> datetime | None:
+        """Henter forventet kampstart for en spiller så nøyaktig som mulig.
+
+        espn-api Player har ikke alltid et felt for kampstart, men roster-spillere
+        får et schedule-objekt (per scoring-period) med datetime. Vi plukker den
+        neste kampen som er i fremtiden.
+        """
+        # Hvis det finnes en direkte dato, bruk den.
+        for attr in ("game_date", "gameDate", "game_start_time", "game_start"):
+            kickoff = getattr(player, attr, None)
+            if isinstance(kickoff, datetime):
+                return kickoff
+            if isinstance(kickoff, (int, float)):
+                return datetime.fromtimestamp(kickoff / 1000, tz=timezone.utc)
+
+        # Fall back: se i schedule-dict etter nærmeste fremtidige kamp
+        schedule = getattr(player, "schedule", None) or {}
+        upcoming: list[datetime] = []
+        for _, entry in schedule.items():
+            if isinstance(entry, list):
+                # _get_all_pro_schedule gir liste av kamper per uke
+                games = entry
+            else:
+                games = [entry]
+            for game in games:
+                date_val = game.get("date")
+                if isinstance(date_val, datetime):
+                    upcoming.append(date_val)
+                elif isinstance(date_val, (int, float)):
+                    upcoming.append(
+                        datetime.fromtimestamp(date_val / 1000, tz=timezone.utc)
+                    )
+        now_utc = datetime.now(timezone.utc)
+        future_games = [d for d in upcoming if d >= now_utc]
+        if not future_games and upcoming:
+            # hvis alle er fortid, ta siste (for å i det minste ha et tidspunkt)
+            return sorted(upcoming)[-1]
+        if future_games:
+            return sorted(future_games)[0]
+        return None
+
+    async def inactive_alert_scheduler(self) -> None:
+        """Kjører periodisk sjekk for inaktive spillere og varsler 1 time før kamp."""
+        await self.bot.wait_until_ready()
+        try:
+            id_map = load_discord_ids()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Finner ikke Discord-ID mapping: %s", exc)
+            return
+
+        channel: discord.TextChannel | None = None
+        while not isinstance(channel, discord.TextChannel):
+            channel = self.bot.get_channel(PREIK_KANAL)
+            if not isinstance(channel, discord.TextChannel):
+                logger.warning(
+                    "Fant ikke tekstkanal med id %s, prøver igjen om 30s", PREIK_KANAL
+                )
+                await asyncio.sleep(30)
+
+        while True:
+            now = datetime.now(self.norsk_tz)
+            try:
+                league = get_league()
+                for team in league.teams:
+                    discord_id = id_map.get(team.team_id)
+                    if discord_id is None:
+                        continue
+
+                    flagged: list[tuple[str, str, datetime | None]] = []
+                    for player in team.roster:
+                        slot = getattr(player, "lineupSlot", "")
+                        if slot in {"BE", "IR"}:
+                            continue
+
+                        status = getattr(player, "injuryStatus", "") or ""
+                        if status.upper() not in {
+                            "OUT",
+                            "DOUBTFUL",
+                            "INACTIVE",
+                            "SUSPENSION",
+                        }:
+                            continue
+
+                        kickoff = self._player_kickoff(player)
+                        if kickoff:
+                            kickoff = kickoff.astimezone(self.norsk_tz)
+                            seconds_to_kickoff = (kickoff - now).total_seconds()
+                            if seconds_to_kickoff < 0 or seconds_to_kickoff > 3600:
+                                continue
+                            key_time = kickoff.isoformat()
+                        else:
+                            key_time = None
+
+                        unique_key = (
+                            team.team_id,
+                            getattr(player, "playerId", getattr(player, "name", None)),
+                            key_time,
+                        )
+                        if unique_key in self.inactive_notified:
+                            continue
+
+                        flagged.append((player.name, status, kickoff))
+                        self.inactive_notified.add(unique_key)
+
+                    if flagged:
+                        lines = [
+                            f"<@{discord_id}>: Du har inaktive spillere i oppstillingen din!"
+                        ]
+                        for name, status, kickoff in flagged:
+                            when_txt = kickoff.strftime("%H:%M") if kickoff else "snart"
+                            lines.append(
+                                f"- {name} ({status}) starter ca. kl {when_txt}"
+                            )
+                        await channel.send("\n".join(lines))
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logger.error(
+                    "Feil ved sjekk av inaktive spillere: %s. Prøver igjen om 10 min.",
+                    exc,
+                )
+            await asyncio.sleep(600)
 
 
 async def setup(bot: Bot) -> None:

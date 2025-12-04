@@ -1,4 +1,5 @@
 """Tester for ppr.py"""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from cogs.ppr import PPR
@@ -44,9 +45,7 @@ def fixture_ppr_cog(mock_get_client):
 @pytest.mark.asyncio
 async def test_get_players_returns_list(monkeypatch, ppr_cog):
     """Sikrer at _get_players gir liste med team/ppr."""
-    monkeypatch.setattr(
-        ppr_cog, "_get_players", AsyncMock(return_value=DUMMY_PLAYERS)
-    )
+    monkeypatch.setattr(ppr_cog, "_get_players", AsyncMock(return_value=DUMMY_PLAYERS))
     players = await ppr_cog._get_players()  # pylint: disable=protected-access
     assert isinstance(players, list)
     assert all("team" in p and "ppr" in p for p in players)
@@ -68,9 +67,7 @@ async def test_save_snapshot(monkeypatch, ppr_cog):
 @pytest.mark.asyncio
 async def test_ppr_command_logic(monkeypatch, ppr_cog):
     """Tester ppr-kommandoen end-to-end med dummy-data."""
-    monkeypatch.setattr(
-        ppr_cog, "_get_players", AsyncMock(return_value=DUMMY_PLAYERS)
-    )
+    monkeypatch.setattr(ppr_cog, "_get_players", AsyncMock(return_value=DUMMY_PLAYERS))
     monkeypatch.setattr("cogs.ppr.TEAM_NAMES", DUMMY_TEAM_NAMES)
     ctx = MagicMock()
     ctx.send = AsyncMock()

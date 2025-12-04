@@ -32,6 +32,7 @@ def test_get_creds_none(monkeypatch):
 
 def test_get_creds_returns_creds(monkeypatch):
     """Sjekker at get_creds() returnerer creds når filen finnes."""
+
     class DummyCreds:
         """Dummy credentials-objekt for testing."""
 
