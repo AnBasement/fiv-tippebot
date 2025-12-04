@@ -18,9 +18,11 @@ import re
 import aiohttp
 from aiohttp import ClientTimeout
 import pytz
+import discord
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
 
+from core.utils.espn_helpers import get_league
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
 from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
@@ -112,8 +114,10 @@ class VestskTipping(commands.Cog):
         self.norsk_tz = pytz.timezone("Europe/Oslo")
         self.last_reminder_week = None
         self.last_reminder_sunday = None
+        self.last_posted_week = None
         task = self.reminder_scheduler()
         self.reminder_task = self.bot.loop.create_task(task)
+        self.auto_post_task = self.bot.loop.create_task(self.auto_post_scheduler())
 
     def get_players(self, sheet) -> dict:
         """
@@ -127,6 +131,7 @@ class VestskTipping(commands.Cog):
 
     async def cog_unload(self):
         self.reminder_task.cancel()
+        self.auto_post_task.cancel()
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -146,11 +151,31 @@ class VestskTipping(commands.Cog):
         await self._kamper_impl(ctx, uke)
 
     async def _kamper_impl(self, ctx, uke: int | None = None):
+        events = await self._fetch_week_events(uke)
+        for ev in events:
+            comps = ev["competitions"][0]["competitors"]
+            home = next(c for c in comps if c["homeAway"] == "home")
+            away = next(c for c in comps if c["homeAway"] == "away")
+            home_team = home["team"]["displayName"]
+            away_team = away["team"]["displayName"]
+            away_emoji = teams.get(away_team, {"emoji": ""})["emoji"]
+            home_emoji = teams.get(home_team, {"emoji": ""})["emoji"]
+            await ctx.send(f"{away_emoji} {away_team} @ {home_team} {home_emoji}")
+
+        # Send en melding i preik
+        kanal = ctx.bot.get_channel(PREIK_KANAL)
+        if kanal:
+            await kanal.send(f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
+
+    async def _fetch_week_events(self, uke: int | None) -> list:
+        """Hent og sorter NFL-kamper for en uke via ESPN scoreboard API."""
         now = datetime.now()
         season = now.year if now.month >= 3 else now.year - 1
         url = SCOREBOARD_URL
         if uke:
             url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
+        logger.debug("Henter URL: %s", url)
+
         try:
             async with aiohttp.ClientSession(
                 timeout=ClientTimeout(total=10)
@@ -172,22 +197,8 @@ class VestskTipping(commands.Cog):
         if not events:
             raise NoEventsFoundError(uke)
 
-        # Sorter events på datetime
         events.sort(key=lambda ev: parse_espn_date(ev.get("date")))
-        for ev in events:
-            comps = ev["competitions"][0]["competitors"]
-            home = next(c for c in comps if c["homeAway"] == "home")
-            away = next(c for c in comps if c["homeAway"] == "away")
-            home_team = home["team"]["displayName"]
-            away_team = away["team"]["displayName"]
-            away_emoji = teams.get(away_team, {"emoji": ""})["emoji"]
-            home_emoji = teams.get(home_team, {"emoji": ""})["emoji"]
-            await ctx.send(f"{away_emoji} {away_team} @ {home_team} {home_emoji}")
-
-        # Send en melding i preik
-        kanal = ctx.bot.get_channel(PREIK_KANAL)
-        if kanal:
-            await kanal.send(f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
+        return events
 
     async def reminder_scheduler(self):
         """Bakgrunnsloop for torsdag/søndag-påminnelser i PREIK."""
@@ -329,6 +340,79 @@ class VestskTipping(commands.Cog):
                 logger.error("Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e)
                 await asyncio.sleep(300)
 
+    async def auto_post_scheduler(self):
+        """Poster ukens kamper automatisk når ESPNs API viser ny uke."""
+        await self.bot.wait_until_ready()
+        vestsk_channel = self.bot.get_channel(VESTSK_KANAL)
+        preik_channel = self.bot.get_channel(PREIK_KANAL)
+
+        while True:
+            try:
+                league = get_league()
+                current_week = league.current_week
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logger.error(
+                    "Klarte ikke hente league-info for autopost: %s. Prøver igjen om 1 time.",
+                    exc,
+                )
+                await asyncio.sleep(3600)
+                continue
+
+            if self.last_posted_week == current_week:
+                await asyncio.sleep(3600)
+                continue
+
+            try:
+                events = await self._fetch_week_events(current_week)
+            except NoEventsFoundError:
+                logger.info(
+                    "Ingen kamper funnet for uke %s ennå. Prøver igjen om 1 time.",
+                    current_week,
+                )
+                await asyncio.sleep(3600)
+                continue
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logger.error(
+                    "Feil ved henting av kamper for uke %s: %s. Prøver igjen om 1 time.",
+                    current_week,
+                    exc,
+                )
+                await asyncio.sleep(3600)
+                continue
+
+            if not events:
+                await asyncio.sleep(3600)
+                continue
+
+            # Sjekk om ukens kamper allerede er postet nylig (f.eks. før restart)
+            if isinstance(vestsk_channel, discord.TextChannel):
+                try:
+                    already = await self._events_posted_recently(
+                        events, vestsk_channel
+                    )
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    logger.warning("Kunne ikke sjekke historikk: %s", exc)
+                    already = False
+                if already:
+                    self.last_posted_week = current_week
+                    await asyncio.sleep(3600)
+                    continue
+
+            if isinstance(vestsk_channel, discord.TextChannel):
+                for ev in events:
+                    await vestsk_channel.send(self._format_event(ev))
+                await vestsk_channel.send(
+                    "Reager med laget du tror vinner på meldingene over."
+                )
+            if isinstance(preik_channel, discord.TextChannel):
+                await preik_channel.send(
+                    f"@everyone Ukens kamper (uke {current_week}) er lagt ut i <#{VESTSK_KANAL}>!"
+                )
+
+            self.last_posted_week = current_week
+            logger.info("Auto-postet kamper for uke %s", current_week)
+            await asyncio.sleep(3600)
+
     def _format_event(self, ev):
         if "home" in ev and "away" in ev:
             home_team = ev["home"]
@@ -344,6 +428,26 @@ class VestskTipping(commands.Cog):
             f"{teams.get(away_team, {'emoji': ''})['emoji']} {away_team} @ "
             f"{home_team} {teams.get(home_team, {'emoji': ''})['emoji']}"
         )
+
+    async def _events_posted_recently(
+        self, events: list, channel: discord.TextChannel
+    ) -> bool:
+        """Sjekker om alle kamper allerede er postet i kanalen siste 14 dager."""
+        if not events:
+            return False
+        two_weeks_ago = datetime.now(self.norsk_tz) - timedelta(days=14)
+        needed = {self._format_event(ev) for ev in events}
+        found: set[str] = set()
+
+        async for msg in channel.history(limit=200, after=two_weeks_ago):
+            if msg.author != self.bot.user:
+                continue
+            content = msg.content.strip()
+            if content in needed:
+                found.add(content)
+            if needed == found:
+                return True
+        return needed == found
 
     # === eksport ===
     @commands.command(name="eksporter")
