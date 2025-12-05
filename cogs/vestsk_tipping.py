@@ -23,9 +23,6 @@ from discord.ext import commands
 from discord.ext.commands import CheckFailure
 
 from core.utils.espn_helpers import get_league
-from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
-from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 from core.errors import (
     APIFetchError,
     NoEventsFoundError,
@@ -33,6 +30,9 @@ from core.errors import (
     ResultaterError,
 )
 from core.decorators import admin_only
+from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
+from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
+from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
@@ -60,9 +60,8 @@ def parse_espn_date(datestr: str) -> datetime:
 class VestskTipping(commands.Cog):
     """Cog for håndtering av Vestsk Tipping.
 
-    Denne cog-en inneholder all logikk for tipping på NFL-kamper,
-    inkludert registrering av bets, eksport til Google Sheets,
-    resultatoppdatering og automatiske påminnelser.
+    Logikk for tipping på NFL-kamper, inkludert registrering av bets,
+    eksport til Google Sheets, resultatoppdatering og automatiske påminnelser.
 
     Attributes:
         bot (commands.Bot): Discord bot-instansen
@@ -105,10 +104,8 @@ class VestskTipping(commands.Cog):
         )
 
     def __init__(self, bot):
-        """Initialiserer VestskTipping cog.
-
-        Args:
-            bot (commands.Bot): Discord bot-instansen
+        """
+        Initialiserer VestskTipping cog.
         """
         self.bot = bot
         self.norsk_tz = pytz.timezone("Europe/Oslo")
@@ -475,14 +472,12 @@ class VestskTipping(commands.Cog):
         norsk_tz = pytz.timezone("Europe/Oslo")
         now = datetime.now(norsk_tz)
 
-        # Søk bakover i tid for å finne siste gruppe med bot-meldinger
-        # Begrens søket til siste 14 dager for å unngå for gamle meldinger
+        # Søk siste 14 dager for å finne siste gruppe med bot-meldinger
         search_limit = now - timedelta(days=14)
 
         emoji_to_team_short = {v: k for k, v in team_emojis.items()}
         is_valid_game_message = VestskTipping.is_valid_game_message
 
-        # Hent alle bot-meldinger fra de siste 14 dagene
         all_bot_messages = []
         async for msg in channel.history(limit=200, after=search_limit):
             if msg.author == self.bot.user and is_valid_game_message(msg.content):
@@ -497,7 +492,6 @@ class VestskTipping(commands.Cog):
         all_bot_messages.sort(key=lambda m: m.created_at, reverse=True)
 
         # Finn den nyeste gruppen med meldinger (samme sesjon)
-        # Stopp ved første gap på mer enn 2 timer mellom meldinger
         messages = [all_bot_messages[0]]  # Start med nyeste melding
 
         for i in range(1, len(all_bot_messages)):
