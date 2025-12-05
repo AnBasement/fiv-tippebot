@@ -387,9 +387,7 @@ class VestskTipping(commands.Cog):
             # Sjekk om ukens kamper allerede er postet nylig (f.eks. før restart)
             if isinstance(vestsk_channel, discord.TextChannel):
                 try:
-                    already = await self._events_posted_recently(
-                        events, vestsk_channel
-                    )
+                    already = await self._events_posted_recently(events, vestsk_channel)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.warning("Kunne ikke sjekke historikk: %s", exc)
                     already = False
