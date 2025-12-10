@@ -15,6 +15,7 @@ import asyncio
 from datetime import datetime, timedelta
 import logging
 import re
+from types import SimpleNamespace
 import aiohttp
 from aiohttp import ClientTimeout
 import pytz
@@ -112,6 +113,7 @@ class VestskTipping(commands.Cog):
         self.last_reminder_week = None
         self.last_reminder_sunday = None
         self.last_posted_week = None
+        self.last_processed_week = None
         task = self.reminder_scheduler()
         self.reminder_task = self.bot.loop.create_task(task)
         self.auto_post_task = self.bot.loop.create_task(self.auto_post_scheduler())
@@ -337,6 +339,45 @@ class VestskTipping(commands.Cog):
                 logger.error("Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e)
                 await asyncio.sleep(300)
 
+    async def _process_previous_week(
+        self, current_week: int, channel: discord.TextChannel | None
+    ) -> bool:
+        """
+        Kjør eksport og resultater for forrige uke før nye kamper postes.
+        Returnerer True hvis alt gikk fint (eller det ikke er noe å gjøre).
+        """
+        if current_week <= 1:
+            return True
+
+        previous_week = current_week - 1
+        if self.last_processed_week == previous_week:
+            return True
+
+        if not isinstance(channel, discord.TextChannel):
+            logger.warning(
+                "Mangler gyldig kanal for prosessering av uke %s", previous_week
+            )
+            return False
+
+        ctx = SimpleNamespace(channel=channel, send=channel.send, bot=self.bot)
+
+        try:
+            await self._export_impl(ctx, previous_week)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Klarte ikke eksportere for uke %s: %s", previous_week, exc)
+            return False
+
+        try:
+            await self._resultater_impl(ctx, previous_week)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error(
+                "Klarte ikke beregne resultater for uke %s: %s", previous_week, exc
+            )
+            return False
+
+        self.last_processed_week = previous_week
+        return True
+
     async def auto_post_scheduler(self):
         """Poster ukens kamper automatisk når ESPNs API viser ny uke."""
         await self.bot.wait_until_ready()
@@ -352,6 +393,13 @@ class VestskTipping(commands.Cog):
                     "Klarte ikke hente league-info for autopost: %s. Prøver igjen om 1 time.",
                     exc,
                 )
+                await asyncio.sleep(3600)
+                continue
+
+            processing_ok = await self._process_previous_week(
+                current_week, vestsk_channel
+            )
+            if not processing_ok:
                 await asyncio.sleep(3600)
                 continue
 
