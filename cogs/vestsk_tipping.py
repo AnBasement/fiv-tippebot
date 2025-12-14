@@ -391,6 +391,42 @@ class VestskTipping(commands.Cog):
         except Exception as exc:  # pylint: disable-broad-exception-caught
             logger.warning("Klarte ikke lagre state til sheet: %s", exc)
 
+    def _season_window(
+        self, now: datetime
+    ) -> tuple[bool, datetime | None, datetime | None]:
+        """
+        Returnerer (active, season_end, next_start).
+        Sesong starter helgen etter første mandag i september (lørdag 00:00),
+        slutter andre søndag i februar (23:59:59).
+        """
+
+        def season_start(year: int) -> datetime:
+            first_sept = datetime(year, 9, 1, tzinfo=self.norsk_tz)
+            first_monday = first_sept + timedelta(days=(0 - first_sept.weekday()) % 7)
+            start_day = first_monday + timedelta(days=5)  # lørdag etter mandag
+            start_day = start_day - timedelta(days=3)  # litt buffer før sesongstart
+            return start_day.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        def season_end(year: int) -> datetime:
+            feb_first = datetime(year + 1, 2, 1, tzinfo=self.norsk_tz)
+            first_sunday = feb_first + timedelta(days=(6 - feb_first.weekday()) % 7)
+            second_sunday = first_sunday + timedelta(days=7)
+            end_day = second_sunday + timedelta(days=2)  # to dager etter SB for buffer
+            return end_day.replace(hour=23, minute=59, second=59, microsecond=0)
+
+        for start_dt, end_dt in (
+            (season_start(now.year - 1), season_end(now.year - 1)),
+            (season_start(now.year), season_end(now.year)),
+        ):
+            if start_dt <= now <= end_dt:
+                return True, end_dt, None
+
+        future_starts = [
+            dt for dt in (season_start(now.year), season_start(now.year + 1)) if dt > now
+        ]
+        next_start = min(future_starts) if future_starts else None
+        return False, None, next_start
+
     def _should_process_previous_week(self, now: datetime, current_week: int) -> bool:
         """Avgjør om vi skal kjøre eksport/resultater for forrige uke."""
         if current_week <= 1:
@@ -459,6 +495,19 @@ class VestskTipping(commands.Cog):
         while True:
             try:
                 now = datetime.now(self.norsk_tz)
+
+                in_season, season_end, next_start = self._season_window(now)
+                if not in_season:
+                    if next_start:
+                        sleep_seconds = max(60, (next_start - now).total_seconds())
+                        logger.info(
+                            "Utenfor sesong. Sover til neste sesongstart: %s", next_start
+                        )
+                        await asyncio.sleep(sleep_seconds)
+                        continue
+                    await asyncio.sleep(3600)
+                    continue
+
                 league = get_league()
                 current_week = league.current_week
             except Exception as exc:  # pylint: disable=broad-exception-caught
