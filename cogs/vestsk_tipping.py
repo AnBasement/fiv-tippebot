@@ -422,7 +422,9 @@ class VestskTipping(commands.Cog):
                 return True, end_dt, None
 
         future_starts = [
-            dt for dt in (season_start(now.year), season_start(now.year + 1)) if dt > now
+            dt
+            for dt in (season_start(now.year), season_start(now.year + 1))
+            if dt > now
         ]
         next_start = min(future_starts) if future_starts else None
         return False, None, next_start
@@ -501,7 +503,8 @@ class VestskTipping(commands.Cog):
                     if next_start:
                         sleep_seconds = max(60, (next_start - now).total_seconds())
                         logger.info(
-                            "Utenfor sesong. Sover til neste sesongstart: %s", next_start
+                            "Utenfor sesong. Sover til neste sesongstart: %s",
+                            next_start,
                         )
                         await asyncio.sleep(sleep_seconds)
                         continue
