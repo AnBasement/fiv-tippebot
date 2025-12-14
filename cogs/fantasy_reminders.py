@@ -385,7 +385,9 @@ class FantasyReminders(commands.Cog):
                 for team in league.teams:
                     discord_id = id_map.get(team.team_id)
                     if discord_id is None:
-                        team_display = getattr(team, "team_name", f"Team {team.team_id}")
+                        team_display = getattr(
+                            team, "team_name", f"Team {team.team_id}"
+                        )
 
                     flagged: list[tuple[str, str, datetime | None]] = []
                     for player in team.roster:
@@ -445,7 +447,9 @@ class FantasyReminders(commands.Cog):
                             )
 
                 if missing_id_flags:
-                    lines = ["@everyone Noen har inaktive spillere i aktiv spillerstall:"]
+                    lines = [
+                        "@everyone Noen har inaktive spillere i aktiv spillerstall:"
+                    ]
                     lines.extend(missing_id_flags)
                     await channel.send("\n".join(lines))
                     if isinstance(admin_channel, discord.TextChannel):
