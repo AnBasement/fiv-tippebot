@@ -40,6 +40,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+PROCESS_WEEKDAY = 1  # Tuesday (Monday=0)
+PROCESS_HOUR = 20  # 20:00 local time
 
 
 def parse_espn_date(datestr: str) -> datetime:
@@ -114,6 +116,7 @@ class VestskTipping(commands.Cog):
         self.last_reminder_sunday = None
         self.last_posted_week = None
         self.last_processed_week = None
+        self.state_loaded = False
         task = self.reminder_scheduler()
         self.reminder_task = self.bot.loop.create_task(task)
         self.auto_post_task = self.bot.loop.create_task(self.auto_post_scheduler())
@@ -339,6 +342,71 @@ class VestskTipping(commands.Cog):
                 logger.error("Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e)
                 await asyncio.sleep(300)
 
+    async def _get_state_sheet(self):
+        """Hent eller opprett et lite 'State'-ark i samme Spreadsheet."""
+        base_sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
+        spreadsheet = base_sheet.spreadsheet
+        try:
+            return spreadsheet.worksheet("State")
+        except Exception:  # pylint: disable=broad-exception-caught
+            state_ws = await asyncio.to_thread(
+                spreadsheet.add_worksheet, title="State", rows=2, cols=2
+            )
+            await asyncio.to_thread(
+                state_ws.update, "A1:B1", [["last_processed_week", "last_posted_week"]]
+            )
+            return state_ws
+
+    async def _load_state(self):
+        """Last tidligere state fra Sheets slik at restarts ikke trigger dobbeltkjøringer."""
+        try:
+            state_ws = await self._get_state_sheet()
+            values = await asyncio.to_thread(state_ws.get, "A2:B2")
+            row = values[0] if values else []
+            lpw = row[0] if len(row) > 0 else ""
+            lpost = row[1] if len(row) > 1 else ""
+            self.last_processed_week = int(lpw) if lpw else None
+            self.last_posted_week = int(lpost) if lpost else None
+        except Exception as exc:  # pylint: disable-broad-exception-caught
+            logger.warning("Klarte ikke laste state fra sheet: %s", exc)
+        finally:
+            self.state_loaded = True
+
+    async def _save_state(self):
+        """Persister state i Sheets slik at den overlever restarts/deploys."""
+        if not self.state_loaded:
+            return
+        try:
+            state_ws = await self._get_state_sheet()
+            await asyncio.to_thread(
+                state_ws.update,
+                "A2:B2",
+                [
+                    [
+                        self.last_processed_week if self.last_processed_week else "",
+                        self.last_posted_week if self.last_posted_week else "",
+                    ]
+                ],
+            )
+        except Exception as exc:  # pylint: disable-broad-exception-caught
+            logger.warning("Klarte ikke lagre state til sheet: %s", exc)
+
+    def _should_process_previous_week(self, now: datetime, current_week: int) -> bool:
+        """Avgjør om vi skal kjøre eksport/resultater for forrige uke."""
+        if current_week <= 1:
+            return False
+        previous_week = current_week - 1
+        if self.last_processed_week == previous_week:
+            return False
+
+        # Kjører fra tirsdag kl 20:00, eller senere i uken hvis vi har hoppet over
+        if now.weekday() < PROCESS_WEEKDAY:
+            return False
+        if now.weekday() == PROCESS_WEEKDAY:
+            earliest = now.replace(hour=PROCESS_HOUR, minute=0, second=0, microsecond=0)
+            return now >= earliest
+        return True  # Onsdag eller senere og ikke gjort ennå
+
     async def _process_previous_week(
         self, current_week: int, channel: discord.TextChannel | None
     ) -> bool:
@@ -376,6 +444,7 @@ class VestskTipping(commands.Cog):
             return False
 
         self.last_processed_week = previous_week
+        await self._save_state()
         return True
 
     async def auto_post_scheduler(self):
@@ -384,8 +453,12 @@ class VestskTipping(commands.Cog):
         vestsk_channel = self.bot.get_channel(VESTSK_KANAL)
         preik_channel = self.bot.get_channel(PREIK_KANAL)
 
+        if not self.state_loaded:
+            await self._load_state()
+
         while True:
             try:
+                now = datetime.now(self.norsk_tz)
                 league = get_league()
                 current_week = league.current_week
             except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -396,14 +469,21 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(3600)
                 continue
 
-            processing_ok = await self._process_previous_week(
-                current_week, vestsk_channel
-            )
-            if not processing_ok:
+            # Kjører forrige ukes eksport/resultater først (tirsdag 20:00+ eller senere)
+            if self._should_process_previous_week(now, current_week):
+                processing_ok = await self._process_previous_week(
+                    current_week, vestsk_channel
+                )
+                if not processing_ok:
+                    await asyncio.sleep(3600)
+                    continue
+
+            if self.last_posted_week == current_week:
                 await asyncio.sleep(3600)
                 continue
 
-            if self.last_posted_week == current_week:
+            # Ikke post ny uke før forrige uke er behandlet
+            if current_week > 1 and self.last_processed_week != current_week - 1:
                 await asyncio.sleep(3600)
                 continue
 
@@ -438,6 +518,7 @@ class VestskTipping(commands.Cog):
                     already = False
                 if already:
                     self.last_posted_week = current_week
+                    await self._save_state()
                     await asyncio.sleep(3600)
                     continue
 
@@ -453,6 +534,7 @@ class VestskTipping(commands.Cog):
                 )
 
             self.last_posted_week = current_week
+            await self._save_state()
             logger.info("Auto-postet kamper for uke %s", current_week)
             await asyncio.sleep(3600)
 
