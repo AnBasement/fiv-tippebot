@@ -10,7 +10,7 @@ import pytz
 from discord.ext import commands
 import discord
 from discord.ext.commands import Bot
-from data.channel_ids import PREIK_KANAL
+from data.channel_ids import PREIK_KANAL, ADMIN_CHANNEL_ID
 from data.brukere import load_discord_ids
 from core.utils.espn_helpers import get_league
 
@@ -248,6 +248,7 @@ class FantasyReminders(commands.Cog):
         """
         await self.bot.wait_until_ready()
         channel: discord.TextChannel | None = None
+        admin_channel: discord.TextChannel | None = None
         while not isinstance(channel, discord.TextChannel):
             channel = self.bot.get_channel(PREIK_KANAL)
             if not isinstance(channel, discord.TextChannel):
@@ -255,6 +256,7 @@ class FantasyReminders(commands.Cog):
                     "Fant ikke tekstkanal med id %s, prøver igjen om 30s", PREIK_KANAL
                 )
                 await asyncio.sleep(30)
+        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
 
         while True:
             now: datetime = datetime.now(self.norsk_tz)
@@ -379,10 +381,11 @@ class FantasyReminders(commands.Cog):
             now = datetime.now(self.norsk_tz)
             try:
                 league = get_league()
+                missing_id_flags: list[str] = []
                 for team in league.teams:
                     discord_id = id_map.get(team.team_id)
                     if discord_id is None:
-                        continue
+                        team_display = getattr(team, "team_name", f"Team {team.team_id}")
 
                     flagged: list[tuple[str, str, datetime | None]] = []
                     for player in team.roster:
@@ -420,7 +423,7 @@ class FantasyReminders(commands.Cog):
                         flagged.append((player.name, status, kickoff))
                         self.inactive_notified.add(unique_key)
 
-                    if flagged:
+                    if flagged and discord_id is not None:
                         lines = [
                             f"<@{discord_id}>: Du har inaktive spillere i oppstillingen din!"
                         ]
@@ -430,6 +433,25 @@ class FantasyReminders(commands.Cog):
                                 f"- {name} ({status}) starter ca. kl {when_txt}"
                             )
                         await channel.send("\n".join(lines))
+                        if isinstance(admin_channel, discord.TextChannel):
+                            await admin_channel.send(
+                                f"[inactive-alert] Varslet <@{discord_id}> om {len(flagged)} spiller(e)."
+                            )
+                    elif flagged and discord_id is None:
+                        for name, status, kickoff in flagged:
+                            when_txt = kickoff.strftime("%H:%M") if kickoff else "snart"
+                            missing_id_flags.append(
+                                f"- {team_display}: {name} ({status}) ca. kl {when_txt}"
+                            )
+
+                if missing_id_flags:
+                    lines = ["@everyone Noen har inaktive spillere i aktiv spillerstall:"]
+                    lines.extend(missing_id_flags)
+                    await channel.send("\n".join(lines))
+                    if isinstance(admin_channel, discord.TextChannel):
+                        await admin_channel.send(
+                            f"[inactive-alert] Sendte @everyone fallback for {len(missing_id_flags)} spiller(e)."
+                        )
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.error(
                     "Feil ved sjekk av inaktive spillere: %s. Prøver igjen om 10 min.",
