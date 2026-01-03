@@ -32,7 +32,7 @@ from core.errors import (
 )
 from core.decorators import admin_only
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
+from data.channel_ids import PREIK_KANAL, VESTSK_KANAL, ADMIN_CHANNEL_ID
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 
 # Konfigurer logging
@@ -369,6 +369,11 @@ class VestskTipping(commands.Cog):
             self.last_posted_week = int(lpost) if lpost else None
         except Exception as exc:  # pylint: disable-broad-exception-caught
             logger.warning("Klarte ikke laste state fra sheet: %s", exc)
+            admin_channel = self._admin_channel()
+            if admin_channel:
+                await admin_channel.send(
+                    f"[vestsk] Klarte ikke laste State-arket: {exc}"
+                )
         finally:
             self.state_loaded = True
 
@@ -390,6 +395,11 @@ class VestskTipping(commands.Cog):
             )
         except Exception as exc:  # pylint: disable-broad-exception-caught
             logger.warning("Klarte ikke lagre state til sheet: %s", exc)
+            admin_channel = self._admin_channel()
+            if admin_channel:
+                await admin_channel.send(
+                    f"[vestsk] Klarte ikke lagre State-arket: {exc}"
+                )
 
     def _season_window(
         self, now: datetime
@@ -453,10 +463,16 @@ class VestskTipping(commands.Cog):
         Returnerer True hvis alt gikk fint (eller det ikke er noe å gjøre).
         """
         if current_week <= 1:
+            logger.debug("current_week=%s, skipping processing", current_week)
             return True
 
         previous_week = current_week - 1
         if self.last_processed_week == previous_week:
+            logger.debug(
+                "Week %s already processed (last_processed_week=%s). Skipping.",
+                previous_week,
+                self.last_processed_week,
+            )
             return True
 
         if not isinstance(channel, discord.TextChannel):
@@ -468,12 +484,14 @@ class VestskTipping(commands.Cog):
         ctx = SimpleNamespace(channel=channel, send=channel.send, bot=self.bot)
 
         try:
+            logger.info("Running export for week %s", previous_week)
             await self._export_impl(ctx, previous_week)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Klarte ikke eksportere for uke %s: %s", previous_week, exc)
             return False
 
         try:
+            logger.info("Running resultater for week %s", previous_week)
             await self._resultater_impl(ctx, previous_week)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error(
@@ -483,6 +501,11 @@ class VestskTipping(commands.Cog):
 
         self.last_processed_week = previous_week
         await self._save_state()
+        logger.info(
+            "Successfully processed week %s. Updated last_processed_week to %s",
+            previous_week,
+            self.last_processed_week,
+        )
         return True
 
     async def auto_post_scheduler(self):
@@ -493,6 +516,13 @@ class VestskTipping(commands.Cog):
 
         if not self.state_loaded:
             await self._load_state()
+
+        logger.info(
+            "Auto-post scheduler started. Current state: "
+            "last_processed_week=%s, last_posted_week=%s",
+            self.last_processed_week,
+            self.last_posted_week,
+        )
 
         while True:
             try:
@@ -513,6 +543,13 @@ class VestskTipping(commands.Cog):
 
                 league = get_league()
                 current_week = league.current_week
+                logger.debug(
+                    "Checking auto-post scheduler: current_week=%s, "
+                    "last_processed_week=%s, last_posted_week=%s",
+                    current_week,
+                    self.last_processed_week,
+                    self.last_posted_week,
+                )
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.error(
                     "Klarte ikke hente league-info for autopost: %s. Prøver igjen om 1 time.",
@@ -523,19 +560,41 @@ class VestskTipping(commands.Cog):
 
             # Kjører forrige ukes eksport/resultater først (tirsdag 20:00+ eller senere)
             if self._should_process_previous_week(now, current_week):
+                logger.info(
+                    "Processing triggered for week %s (current=%s). "
+                    "Running export and resultater.",
+                    current_week - 1,
+                    current_week,
+                )
                 processing_ok = await self._process_previous_week(
                     current_week, vestsk_channel
                 )
                 if not processing_ok:
+                    logger.warning(
+                        "Processing failed for week %s. Retrying in 1 hour.",
+                        current_week - 1,
+                    )
                     await asyncio.sleep(3600)
                     continue
 
-            if self.last_posted_week == current_week:
+            # Ikke post ny uke før forrige uke er behandlet
+            if current_week > 1 and self.last_processed_week != current_week - 1:
+                logger.debug(
+                    "Blocking post: current_week=%s but last_processed_week=%s (need %s). "
+                    "Waiting for processing to complete.",
+                    current_week,
+                    self.last_processed_week,
+                    current_week - 1,
+                )
                 await asyncio.sleep(3600)
                 continue
 
-            # Ikke post ny uke før forrige uke er behandlet
-            if current_week > 1 and self.last_processed_week != current_week - 1:
+            if self.last_posted_week == current_week:
+                logger.debug(
+                    "Week %s already posted (last_posted_week=%s). Waiting for next week.",
+                    current_week,
+                    self.last_posted_week,
+                )
                 await asyncio.sleep(3600)
                 continue
 
@@ -569,12 +628,22 @@ class VestskTipping(commands.Cog):
                     logger.warning("Kunne ikke sjekke historikk: %s", exc)
                     already = False
                 if already:
+                    logger.info(
+                        "Week %s events already posted in history. "
+                        "Updating state and skipping posting.",
+                        current_week,
+                    )
                     self.last_posted_week = current_week
                     await self._save_state()
                     await asyncio.sleep(3600)
                     continue
 
             if isinstance(vestsk_channel, discord.TextChannel):
+                logger.info(
+                    "Posting %d events for week %s to Discord",
+                    len(events),
+                    current_week,
+                )
                 for ev in events:
                     await vestsk_channel.send(self._format_event(ev))
                 await vestsk_channel.send(
@@ -587,7 +656,13 @@ class VestskTipping(commands.Cog):
 
             self.last_posted_week = current_week
             await self._save_state()
-            logger.info("Auto-postet kamper for uke %s", current_week)
+            logger.info(
+                "Auto-postet kamper for uke %s. Updated state: "
+                "last_processed_week=%s, last_posted_week=%s",
+                current_week,
+                self.last_processed_week,
+                self.last_posted_week,
+            )
             await asyncio.sleep(3600)
 
     def _format_event(self, ev):
@@ -609,22 +684,41 @@ class VestskTipping(commands.Cog):
     async def _events_posted_recently(
         self, events: list, channel: discord.TextChannel
     ) -> bool:
-        """Sjekker om alle kamper allerede er postet i kanalen siste 14 dager."""
+        """Sjekker om alle kamper allerede er postet i kanalen siste 14 dager.
+
+        Søker etter bekreftelse på at all kamper for gjeldende uke allerede er postet.
+        Dette sikrer at selv etter restart, blir ikke duplikater postet.
+        """
         if not events:
             return False
         two_weeks_ago = datetime.now(self.norsk_tz) - timedelta(days=14)
         needed = {self._format_event(ev) for ev in events}
         found: set[str] = set()
 
-        async for msg in channel.history(limit=200, after=two_weeks_ago):
+        # Søk gjennom historikk med høyere limit for å sikre vi finner all bot-meldinger
+        async for msg in channel.history(limit=500, after=two_weeks_ago):
             if msg.author != self.bot.user:
                 continue
             content = msg.content.strip()
             if content in needed:
                 found.add(content)
             if needed == found:
+                logger.info(
+                    "Alle kamper for gjeldende uke er allerede postet. Hopper over posting."
+                )
                 return True
-        return needed == found
+
+        # Hvis vi fant noen men ikke alle, det er en feil-tilstand
+        if found:
+            logger.warning(
+                "Fant %d av %d kamper postet. Dette indikerer mulig duplikat. "
+                "Hopper over posting for sikkerhet.",
+                len(found),
+                len(needed),
+            )
+            return True
+
+        return False
 
     # === eksport ===
     @commands.command(name="eksporter")
