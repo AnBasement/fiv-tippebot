@@ -121,6 +121,10 @@ class VestskTipping(commands.Cog):
         self.reminder_task = self.bot.loop.create_task(task)
         self.auto_post_task = self.bot.loop.create_task(self.auto_post_scheduler())
 
+    def _admin_channel(self) -> discord.TextChannel | None:
+        """Get the admin error reporting channel."""
+        return self.bot.get_channel(ADMIN_CHANNEL_ID)
+
     def get_players(self, sheet) -> dict:
         """
         Returnerer mapping: Discord ID → kolonne.
@@ -170,12 +174,22 @@ class VestskTipping(commands.Cog):
             await kanal.send(f"@everyone Ukens kamper er lagt ut i <#{VESTSK_KANAL}>!")
 
     async def _fetch_week_events(self, uke: int | None) -> list:
-        """Hent og sorter NFL-kamper for en uke via ESPN scoreboard API."""
+        """Hent og sorter NFL-kamper for en uke via ESPN scoreboard API.
+
+        Håndterer både regular season (seasontype=2) og playoffs (seasontype=3).
+        For playoffs, konverterer automatisk fra ligauker (19+) til playoff-uker (1-5).
+        """
         now = datetime.now()
         season = now.year if now.month >= 3 else now.year - 1
         url = SCOREBOARD_URL
         if uke:
-            url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
+            # Hvis uke > 18, vi er i playoffs (seasontype=3)
+            # Playoff-uker i ESPN API: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
+            if uke > 18:
+                playoff_week = uke - 18
+                url = f"{SCOREBOARD_URL}?dates={season}&seasontype=3&week={playoff_week}"
+            else:
+                url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
         logger.debug("Henter URL: %s", url)
 
         try:
@@ -440,11 +454,18 @@ class VestskTipping(commands.Cog):
         return False, None, next_start
 
     def _should_process_previous_week(self, now: datetime, current_week: int) -> bool:
-        """Avgjør om vi skal kjøre eksport/resultater for forrige uke."""
-        if current_week <= 1:
-            return False
+        """Avgjør om vi skal kjøre eksport/resultater for forrige uke.
+
+        Håndterer overgangen fra regular season til playoffs hvor current_week
+        fortsetter å telle oppover (19, 20, etc) selv om ESPN API resetter.
+        """
+        # Alltid prosesser hvis vi ikke har prosessert forrige uke ennå
         previous_week = current_week - 1
         if self.last_processed_week == previous_week:
+            return False
+
+        # Ikke prosesser Week 0 (før sesongstart)
+        if previous_week < 1:
             return False
 
         # Kjører fra tirsdag kl 20:00, eller senere i uken hvis vi har hoppet over
@@ -461,12 +482,14 @@ class VestskTipping(commands.Cog):
         """
         Kjør eksport og resultater for forrige uke før nye kamper postes.
         Returnerer True hvis alt gikk fint (eller det ikke er noe å gjøre).
+
+        Håndterer overgangen til playoffs ved å fortsette ukene oppover (19, 20, etc).
         """
-        if current_week <= 1:
-            logger.debug("current_week=%s, skipping processing", current_week)
+        previous_week = current_week - 1
+        if previous_week < 1:
+            logger.debug("previous_week=%s < 1, skipping processing", previous_week)
             return True
 
-        previous_week = current_week - 1
         if self.last_processed_week == previous_week:
             logger.debug(
                 "Week %s already processed (last_processed_week=%s). Skipping.",
@@ -894,7 +917,13 @@ class VestskTipping(commands.Cog):
 
         url = SCOREBOARD_URL
         if uke:
-            url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
+            # Hvis uke > 18, vi er i playoffs (seasontype=3)
+            # Playoff-uker: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
+            if uke > 18:
+                playoff_week = uke - 18
+                url = f"{SCOREBOARD_URL}?dates={season}&seasontype=3&week={playoff_week}"
+            else:
+                url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
         logger.debug("Henter URL: %s", url)
 
         try:
