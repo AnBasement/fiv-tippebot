@@ -56,11 +56,29 @@ class FantasyReminders(commands.Cog):
         Lager og sender en ukentlig meldig som oppsummerer uken som var,
         inkludert høydepunkter, presenterer seier- og tapsrekker,
         og poster kampene i den kommende uken.
+
+        Fantasy-sesongen går til og med NFL uke 17 (15 uker regular season + 2 uker playoffs).
+        Etter uke 17 postes ingen flere oppsummeringer.
         """
         league = get_league()
         current_week = league.current_week
+
+        # Fantasy-sesongen slutter etter NFL uke 17 (fantasy week 17)
+        # 15 uker regular season (NFL uke 1-15) + 2 uker playoffs (NFL uke 16-17)
+        fantasy_final_week = 17
+
+        if current_week > fantasy_final_week:
+            logger.info(
+                "Hopper over matchup digest - fantasy season sluttet uke %s "
+                "(nå uke %s)",
+                fantasy_final_week,
+                current_week,
+            )
+            return
+
         last_week = max(1, current_week - 1)
         next_week = current_week
+        is_final_week = current_week == fantasy_final_week
 
         msg = []
 
@@ -204,16 +222,45 @@ class FantasyReminders(commands.Cog):
         else:
             msg.append("- Ingen")
 
-        # Preview: Ukens kamper (Uke next_week)
-        msg.append("")
-        msg.append(f"**Neste ukes kamper (Uke {next_week}):**")
-        preview_boxes = league.box_scores(week=next_week)
-        for box in preview_boxes:
-            home, away = box.home_team, box.away_team
-            msg.append(
-                f"- {away.team_name} ({away.wins}-{away.losses}) @ "
-                f"{home.team_name} ({home.wins}-{home.losses})"
+        # Final standings hvis dette er siste uke
+        if is_final_week:
+            msg.append("")
+            msg.append("=" * 40)
+            msg.append("**Fest i Vest 2025**")
+            msg.append("=" * 40)
+
+            # Sorter lag etter seiere, deretter poeng
+            standings = sorted(
+                league.teams, key=lambda t: (t.wins, t.points_for), reverse=True
             )
+
+            for i, team in enumerate(standings, start=1):
+                medal = ""
+                if i == 1:
+                    medal = "🥇 "
+                elif i == 2:
+                    medal = "🥈 "
+                elif i == 3:
+                    medal = "🥉 "
+
+                msg.append(
+                    f"{medal}{i}. {team.team_name}: {team.wins}-{team.losses} "
+                    f"({team.points_for:.2f} poeng)"
+                )
+
+            msg.append("")
+            msg.append("Takk for sesongen! 🎉")
+        else:
+            # Preview: Ukens kamper (Uke next_week) - kun hvis ikke siste uke
+            msg.append("")
+            msg.append(f"**Neste ukes kamper (Uke {next_week}):**")
+            preview_boxes = league.box_scores(week=next_week)
+            for box in preview_boxes:
+                home, away = box.home_team, box.away_team
+                msg.append(
+                    f"- {away.team_name} ({away.wins}-{away.losses}) @ "
+                    f"{home.team_name} ({home.wins}-{home.losses})"
+                )
 
         if channel:
             await channel.send("\n".join(msg))
@@ -248,7 +295,6 @@ class FantasyReminders(commands.Cog):
         """
         await self.bot.wait_until_ready()
         channel: discord.TextChannel | None = None
-        admin_channel: discord.TextChannel | None = None
         while not isinstance(channel, discord.TextChannel):
             channel = self.bot.get_channel(PREIK_KANAL)
             if not isinstance(channel, discord.TextChannel):
@@ -256,7 +302,6 @@ class FantasyReminders(commands.Cog):
                     "Fant ikke tekstkanal med id %s, prøver igjen om 30s", PREIK_KANAL
                 )
                 await asyncio.sleep(30)
-        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
 
         while True:
             now: datetime = datetime.now(self.norsk_tz)
@@ -282,9 +327,7 @@ class FantasyReminders(commands.Cog):
                             await channel.send("@everyone Ikke glem waivers!")
                             try:
                                 await self.build_matchup_digest(channel)
-                            except (
-                                Exception
-                            ) as exc:  # pylint: disable=broad-exception-caught
+                            except Exception as exc:  # pylint: disable=broad-except
                                 logger.exception("Feil i matchup digest: %s", exc)
                                 await channel.send(
                                     "Kunne ikke generere matchup-digest denne uken."
@@ -369,6 +412,7 @@ class FantasyReminders(commands.Cog):
             return
 
         channel: discord.TextChannel | None = None
+        admin_channel: discord.TextChannel | None = None
         while not isinstance(channel, discord.TextChannel):
             channel = self.bot.get_channel(PREIK_KANAL)
             if not isinstance(channel, discord.TextChannel):
@@ -376,6 +420,7 @@ class FantasyReminders(commands.Cog):
                     "Fant ikke tekstkanal med id %s, prøver igjen om 30s", PREIK_KANAL
                 )
                 await asyncio.sleep(30)
+        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
 
         while True:
             now = datetime.now(self.norsk_tz)
@@ -384,10 +429,7 @@ class FantasyReminders(commands.Cog):
                 missing_id_flags: list[str] = []
                 for team in league.teams:
                     discord_id = id_map.get(team.team_id)
-                    if discord_id is None:
-                        team_display = getattr(
-                            team, "team_name", f"Team {team.team_id}"
-                        )
+                    team_display = getattr(team, "team_name", f"Team {team.team_id}")
 
                     flagged: list[tuple[str, str, datetime | None]] = []
                     for player in team.roster:
@@ -437,24 +479,26 @@ class FantasyReminders(commands.Cog):
                         await channel.send("\n".join(lines))
                         if isinstance(admin_channel, discord.TextChannel):
                             await admin_channel.send(
-                                f"[inactive-alert] Varslet <@{discord_id}> om {len(flagged)} spiller(e)."
+                                f"[inactive-alert] Varslet <@{discord_id}> om {len(flagged)} spiller."
                             )
                     elif flagged and discord_id is None:
                         for name, status, kickoff in flagged:
                             when_txt = kickoff.strftime("%H:%M") if kickoff else "snart"
                             missing_id_flags.append(
-                                f"- {team_display}: {name} ({status}) ca. kl {when_txt}"
+                                f"- {team_display}: {name} ({status}) "
+                                f"ca. kl {when_txt}"
                             )
 
                 if missing_id_flags:
                     lines = [
-                        "@everyone Noen har inaktive spillere i aktiv spillerstall:"
+                        "@everyone Noen har inaktive spillere i aktiv " "spillerstall:"
                     ]
                     lines.extend(missing_id_flags)
                     await channel.send("\n".join(lines))
                     if isinstance(admin_channel, discord.TextChannel):
                         await admin_channel.send(
-                            f"[inactive-alert] Sendte @everyone fallback for {len(missing_id_flags)} spiller(e)."
+                            f"[inactive-alert] Sendte @everyone fallback for "
+                            f"{len(missing_id_flags)} spiller(e)."
                         )
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.error(

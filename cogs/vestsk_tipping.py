@@ -9,7 +9,7 @@ inkludert:
 - Automatiske påminnelser for tipping på torsdager og søndager
 """
 
-# pylint: disable=import-error,too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
+# pylint: disable=import-error,too-many-locals,too-many-branches,too-many-statements,too-many-return-statements,too-many-lines
 
 import asyncio
 from datetime import datetime, timedelta
@@ -32,7 +32,7 @@ from core.errors import (
 )
 from core.decorators import admin_only
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from data.channel_ids import PREIK_KANAL, VESTSK_KANAL, ADMIN_CHANNEL_ID
+from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 
 # Konfigurer logging
@@ -123,6 +123,10 @@ class VestskTipping(commands.Cog):
 
     def _admin_channel(self) -> discord.TextChannel | None:
         """Get the admin error reporting channel."""
+        from data.channel_ids import (
+            ADMIN_CHANNEL_ID,
+        )  # pylint: disable=import-outside-toplevel
+
         return self.bot.get_channel(ADMIN_CHANNEL_ID)
 
     def get_players(self, sheet) -> dict:
@@ -184,10 +188,14 @@ class VestskTipping(commands.Cog):
         url = SCOREBOARD_URL
         if uke:
             # Hvis uke > 18, vi er i playoffs (seasontype=3)
-            # Playoff-uker i ESPN API: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
+            # Playoff-uker i ESPN API: 1=Wild Card, 2=Divisional, 3=Conference,
+            # 4=Pro Bowl, 5=Super Bowl
             if uke > 18:
                 playoff_week = uke - 18
-                url = f"{SCOREBOARD_URL}?dates={season}&seasontype=3&week={playoff_week}"
+                url = (
+                    f"{SCOREBOARD_URL}?dates={season}&seasontype=3"
+                    f"&week={playoff_week}"
+                )
             else:
                 url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
         logger.debug("Henter URL: %s", url)
@@ -362,7 +370,7 @@ class VestskTipping(commands.Cog):
         spreadsheet = base_sheet.spreadsheet
         try:
             return spreadsheet.worksheet("State")
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-except
             state_ws = await asyncio.to_thread(
                 spreadsheet.add_worksheet, title="State", rows=2, cols=2
             )
@@ -381,7 +389,7 @@ class VestskTipping(commands.Cog):
             lpost = row[1] if len(row) > 1 else ""
             self.last_processed_week = int(lpw) if lpw else None
             self.last_posted_week = int(lpost) if lpost else None
-        except Exception as exc:  # pylint: disable-broad-exception-caught
+        except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Klarte ikke laste state fra sheet: %s", exc)
             admin_channel = self._admin_channel()
             if admin_channel:
@@ -407,13 +415,48 @@ class VestskTipping(commands.Cog):
                     ]
                 ],
             )
-        except Exception as exc:  # pylint: disable-broad-exception-caught
+        except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Klarte ikke lagre state til sheet: %s", exc)
             admin_channel = self._admin_channel()
             if admin_channel:
                 await admin_channel.send(
                     f"[vestsk] Klarte ikke lagre State-arket: {exc}"
                 )
+
+    async def _get_nfl_current_week(self) -> int:
+        """Hent nåværende NFL-uke fra scoreboard API.
+
+        Returnerer NFL-ukenummer (1-18 for regular season, 19-23 for playoffs).
+        Dette er forskjellig fra fantasy-ukenummer som kan stoppe tidligere.
+        """
+        url = SCOREBOARD_URL
+        try:
+            async with aiohttp.ClientSession(
+                timeout=ClientTimeout(total=10)
+            ) as session:
+                async with session.get(url) as resp:
+                    data = await resp.json()
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error("Kunne ikke hente NFL current_week: %s", e)
+            # Fallback til fantasy week hvis API feiler
+            league = get_league()
+            return league.current_week
+
+        # Hent uke fra scoreboard data
+        week_info = data.get("week", {})
+        week_number = week_info.get("number", 1)
+
+        # Sjekk om vi er i playoffs (seasontype 3)
+        season_info = data.get("season", {})
+        season_type = season_info.get("type", 2)
+
+        if season_type == 3:
+            # Playoffs: konverter playoff-uke til kontinuerlig telling
+            # Playoff week 1-5 blir 19-23
+            return 18 + week_number
+        else:
+            # Regular season: bruk direkte
+            return week_number
 
     def _season_window(
         self, now: datetime
@@ -551,7 +594,7 @@ class VestskTipping(commands.Cog):
             try:
                 now = datetime.now(self.norsk_tz)
 
-                in_season, season_end, next_start = self._season_window(now)
+                in_season, _season_end, next_start = self._season_window(now)
                 if not in_season:
                     if next_start:
                         sleep_seconds = max(60, (next_start - now).total_seconds())
@@ -564,8 +607,8 @@ class VestskTipping(commands.Cog):
                     await asyncio.sleep(3600)
                     continue
 
-                league = get_league()
-                current_week = league.current_week
+                # Hent NFL-uke fra scoreboard API, ikke fantasy-uke
+                current_week = await self._get_nfl_current_week()
                 logger.debug(
                     "Checking auto-post scheduler: current_week=%s, "
                     "last_processed_week=%s, last_posted_week=%s",
@@ -918,10 +961,14 @@ class VestskTipping(commands.Cog):
         url = SCOREBOARD_URL
         if uke:
             # Hvis uke > 18, vi er i playoffs (seasontype=3)
-            # Playoff-uker: 1=Wild Card, 2=Divisional, 3=Conference, 4=Pro Bowl, 5=Super Bowl
+            # Playoff-uker: 1=Wild Card, 2=Divisional, 3=Conference,
+            # 4=Pro Bowl, 5=Super Bowl
             if uke > 18:
                 playoff_week = uke - 18
-                url = f"{SCOREBOARD_URL}?dates={season}&seasontype=3&week={playoff_week}"
+                url = (
+                    f"{SCOREBOARD_URL}?dates={season}&seasontype=3"
+                    f"&week={playoff_week}"
+                )
             else:
                 url = f"{SCOREBOARD_URL}?dates={season}&seasontype=2&week={uke}"
         logger.debug("Henter URL: %s", url)
