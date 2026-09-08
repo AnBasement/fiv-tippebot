@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 TEAM_NAMES = {
     "Kristoffer": "Stavanger Unge Gutter",
     "Arild": "Wergeland Vipers",

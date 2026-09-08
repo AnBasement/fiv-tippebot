@@ -9,7 +9,7 @@ feilsituasjoner og gir feilmeldinger.
 from typing import List, Dict, Any
 import os
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from gspread_formatting import format_cell_range
 from gspread.worksheet import Worksheet
 from gspread.client import Client
@@ -27,11 +27,11 @@ scope: List[str] = [
 ]
 
 
-def get_creds() -> ServiceAccountCredentials:
+def get_creds() -> Credentials:
     """Henter Google API-credentials fra lokal fil.
 
     Returns:
-        ServiceAccountCredentials: Credentials-objekt for Google API.
+        Credentials: Credentials-objekt for Google API.
 
     Raises:
         MissingCredentialsError: Hvis credentials.json-filen ikke finnes.
@@ -40,9 +40,7 @@ def get_creds() -> ServiceAccountCredentials:
     if not os.path.exists(keyfile):
         raise MissingCredentialsError(f"Kunne ikke finne credentials-filen: {keyfile}")
     try:
-        return ServiceAccountCredentials.from_json_keyfile_name(
-            keyfile, scope  # type: ignore
-        )
+        return Credentials.from_service_account_file(keyfile, scopes=scope)
     except Exception as e:
         raise MissingCredentialsError(
             f"Feil ved lesing av credentials {keyfile}: {str(e)}"

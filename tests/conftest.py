@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 import pytest
-import oauth2client.service_account as sac
+import google.oauth2.service_account as google_auth
 import gspread
 
 
@@ -13,8 +13,8 @@ def mock_gspread(monkeypatch):
     """
 
     monkeypatch.setattr(
-        sac.ServiceAccountCredentials,
-        "from_json_keyfile_name",
+        google_auth.Credentials,
+        "from_service_account_file",
         lambda *a, **kw: MagicMock(),
     )
 

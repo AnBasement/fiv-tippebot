@@ -478,9 +478,11 @@ class FantasyReminders(commands.Cog):
                             )
                         await channel.send("\n".join(lines))
                         if isinstance(admin_channel, discord.TextChannel):
-                            await admin_channel.send(
-                                f"[inactive-alert] Varslet <@{discord_id}> om {len(flagged)} spiller."
+                            msg = (
+                                f"[inactive-alert] Varslet <@{discord_id}> om "
+                                f"{len(flagged)} spiller."
                             )
+                            await admin_channel.send(msg)
                     elif flagged and discord_id is None:
                         for name, status, kickoff in flagged:
                             when_txt = kickoff.strftime("%H:%M") if kickoff else "snart"
