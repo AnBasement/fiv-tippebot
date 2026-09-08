@@ -41,7 +41,7 @@ class PPR(commands.Cog):
             logger.error("PPR Cog: Kunne ikke koble til Google Sheets: %s", e)
             raise
 
-    async def _get_players(self, season: str = "2025") -> List[Dict[str, Any]]:
+    async def _get_players(self, season: str = "2026") -> List[Dict[str, Any]]:
         """Henter PPR-data for alle spillere for gitt sesong.
 
         Går gjennom hvert spillerark og henter ut PPR-verdier for
@@ -50,7 +50,7 @@ class PPR(commands.Cog):
 
         Args:
             season (str, optional):
-                Sesongen å hente PPR for. Standard er "2025".
+                Sesongen å hente PPR for. Standard er "2026".
 
         Returns:
             list[dict]:

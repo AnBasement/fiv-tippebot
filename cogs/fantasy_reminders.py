@@ -226,7 +226,7 @@ class FantasyReminders(commands.Cog):
         if is_final_week:
             msg.append("")
             msg.append("=" * 40)
-            msg.append("**Fest i Vest 2025**")
+            msg.append("**Fest i Vest 2026**")
             msg.append("=" * 40)
 
             # Sorter lag etter seiere, deretter poeng
