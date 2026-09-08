@@ -38,8 +38,8 @@ def test_get_creds_returns_creds(monkeypatch):
 
     monkeypatch.setattr("os.path.exists", lambda x: True)
     monkeypatch.setattr(
-        "cogs.sheets.ServiceAccountCredentials.from_json_keyfile_name",
-        lambda file, scope: DummyCreds(),
+        "cogs.sheets.Credentials.from_service_account_file",
+        lambda file, scopes: DummyCreds(),
     )
     creds = sheets.get_creds()
     assert isinstance(creds, DummyCreds)
