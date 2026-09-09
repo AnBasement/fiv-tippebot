@@ -1,6 +1,6 @@
 discord.py==2.3.2
 python-dotenv==1.0.0
-gspread==5.7.2
+gspread==5.10
 google-auth
 pytz==2023.3
 requests==2.31.0
