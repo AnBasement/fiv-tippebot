@@ -1,7 +1,6 @@
 """Enkle hjelpekommandoer for botten (ping m.m.)."""
 
 from discord.ext import commands
-from discord.ext.commands import Bot, Context
 
 
 class Utility(commands.Cog):
@@ -14,13 +13,13 @@ class Utility(commands.Cog):
         bot (Bot): Discord bot-instansen
     """
 
-    def __init__(self, bot: Bot) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         """Initialiserer Utility cog.
 
         Args:
-            bot (Bot): Discord bot-instansen
+            bot (commands.Bot): Discord bot-instansen
         """
-        self.bot: Bot = bot
+        self.bot: commands.Bot = bot
 
     async def _ping_impl(self, ctx: Context) -> None:
         """Intern implementasjon av ping-kommandoen.
@@ -43,10 +42,10 @@ class Utility(commands.Cog):
         await self._ping_impl(ctx)
 
 
-async def setup(bot: Bot) -> None:
+async def setup(bot: commands.Bot) -> None:
     """Setter opp cog-en i Discord bot-instansen.
 
     Args:
-        bot (Bot): Discord bot-instansen som skal få cog-en
+        bot (commands.Bot): Discord bot-instansen som skal få cog-en
     """
     await bot.add_cog(Utility(bot))

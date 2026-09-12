@@ -9,7 +9,6 @@ import logging
 import pytz
 from discord.ext import commands
 import discord
-from discord.ext.commands import Bot
 from data.channel_ids import PREIK_KANAL, ADMIN_CHANNEL_ID
 from data.brukere import load_discord_ids
 from core.utils.espn_helpers import get_league
@@ -30,13 +29,13 @@ class FantasyReminders(commands.Cog):
             Siste uke det ble sendt tirsdagspåminnelse
     """
 
-    def __init__(self, bot: Bot) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         """Initialiserer FantasyReminders cog.
 
         Args:
             bot (commands.Bot): Discord bot-instansen
         """
-        self.bot: Bot = bot
+        self.bot: commands.Bot = bot
         self.norsk_tz = pytz.timezone("Europe/Oslo")
         self.last_waiver_week: int | None = None
         self.inactive_notified: set[tuple[int, str | int | None, str | None]] = set()
@@ -510,10 +509,10 @@ class FantasyReminders(commands.Cog):
             await asyncio.sleep(600)
 
 
-async def setup(bot: Bot) -> None:
+async def setup(bot: commands.Bot) -> None:
     """Setter opp cog-en i Discord bot-instansen.
 
     Args:
-        bot (Bot): Discord bot-instansen som skal få cog-en
+        bot (commands.Bot): Discord bot-instansen som skal få cog-en
     """
     await bot.add_cog(FantasyReminders(bot))

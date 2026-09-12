@@ -1347,6 +1347,6 @@ class VestskTipping(commands.Cog):
 
 
 # --- Setup ---
-async def setup(bot):
+async def setup(bot: commands.Bot) -> None:
     """Legger til VestskTipping-cog i Discord-botten."""
     await bot.add_cog(VestskTipping(bot))

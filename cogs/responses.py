@@ -3,11 +3,10 @@ Håndterer humoristiske meldinger og svar fra botten
 """
 
 from discord.ext import commands
-from discord.ext.commands import Bot, Context, Cog
 from core.errors import ResponseError
 
 
-class Responses(Cog):
+class Responses(commands.Cog):
     """Cog for kommandoer hvor botten svarer med forhåndsdefinerte meldinger.
 
     Denne cog-en inneholder enkle kommandoer som returnerer faste
@@ -17,21 +16,21 @@ class Responses(Cog):
         bot (Bot): Discord bot-instansen
     """
 
-    def __init__(self, bot: Bot) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         """Initialiserer Responses cog.
 
         Args:
-            bot (Bot): Discord bot-instansen
+            bot (commands.Bot): Discord bot-instansen
         """
-        self.bot: Bot = bot
+        self.bot: commands.Bot = bot
 
     @commands.command(name="kaimi")
-    async def kaimi(self, ctx: Context) -> None:
+    async def kaimi(self, ctx: commands.Context) -> None:
         """Poster det fulle navnet til Ka'imi Fairbairn.
         Vanligvis brukt når Ka'imi scorer.
 
         Args:
-            ctx (Context): Discord context-objektet
+            ctx (commands.Context): Discord context-objektet
 
         Raises:
             ResponseError: Hvis sending av meldingen feiler
@@ -105,7 +104,7 @@ class Responses(Cog):
             ) from e
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot) -> None:
     """Setter opp cog-en i Discord bot-instansen.
 
     Args:
