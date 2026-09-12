@@ -47,11 +47,11 @@ class Responses(commands.Cog):
             ) from e
 
     @commands.command(name="doc")
-    async def doc(self, ctx: Context) -> None:
+    async def doc(self, ctx: commands.Context) -> None:
         """Deler lenken til Fest i Vest-dokumentet.
 
         Args:
-            ctx (Context): Discord context-objektet
+            ctx (commands.Context): Discord context-objektet
 
         Raises:
             ResponseError: Hvis sending av lenken feiler

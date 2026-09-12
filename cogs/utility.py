@@ -21,23 +21,23 @@ class Utility(commands.Cog):
         """
         self.bot: commands.Bot = bot
 
-    async def _ping_impl(self, ctx: Context) -> None:
+    async def _ping_impl(self, ctx: commands.Context) -> None:
         """Intern implementasjon av ping-kommandoen.
 
         Args:
-            ctx (Context): Discord context-objektet
+            ctx (commands.Context): Discord context-objektet
         """
         await ctx.send("Pong! ✅")
 
     @commands.command()
-    async def ping(self, ctx: Context) -> None:
+    async def ping(self, ctx: commands.Context) -> None:
         """En enkel kommando for å sjekke om botten er aktiv.
 
         Botten svarer med 'Pong! ✅' for å indikere
         at botten er aktiv.
 
         Args:
-            ctx (Context): Discord context-objektet
+            ctx (commands.Context): Discord context-objektet
         """
         await self._ping_impl(ctx)
 
