@@ -22,6 +22,7 @@ import pytz
 import discord
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
+from gspread.exceptions import WorksheetNotFound
 
 from core.utils.espn_helpers import get_league
 from core.errors import (
@@ -117,6 +118,7 @@ class VestskTipping(commands.Cog):
         self.last_posted_week = None
         self.last_processed_week = None
         self.state_loaded = False
+        self._state_dirty = False
         task = self.reminder_scheduler()
         self.reminder_task = self.bot.loop.create_task(task)
         self.auto_post_task = self.bot.loop.create_task(self.auto_post_scheduler())
@@ -128,6 +130,21 @@ class VestskTipping(commands.Cog):
         )  # pylint: disable=import-outside-toplevel
 
         return self.bot.get_channel(ADMIN_CHANNEL_ID)
+
+    async def _notify_admin(self, message: str) -> None:
+        """Sender et varsel til admin-kanalen uten å la feil derfra spre seg videre.
+
+        En feilet sending (nettverksfeil, manglende tilgang osv.) skal aldri
+        stoppe kalleren - varslingen er et best-effort-forsøk, ikke noe
+        resten av flyten er avhengig av.
+        """
+        admin_channel = self._admin_channel()
+        if not admin_channel:
+            return
+        try:
+            await admin_channel.send(message)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("Klarte ikke sende admin-varsel: %s", exc)
 
     def get_players(self, sheet) -> dict:
         """
@@ -369,8 +386,9 @@ class VestskTipping(commands.Cog):
         base_sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
         spreadsheet = base_sheet.spreadsheet
         try:
-            return spreadsheet.worksheet("State")
-        except Exception:  # pylint: disable=broad-except
+            return await asyncio.to_thread(spreadsheet.worksheet, "State")
+        except WorksheetNotFound:
+            logger.info("Fant ikke State-ark, oppretter nytt.")
             state_ws = await asyncio.to_thread(
                 spreadsheet.add_worksheet, title="State", rows=2, cols=2
             )
@@ -384,25 +402,36 @@ class VestskTipping(commands.Cog):
         try:
             state_ws = await self._get_state_sheet()
             values = await asyncio.to_thread(state_ws.get, "A2:B2")
-            row = values[0] if values else []
-            lpw = row[0] if len(row) > 0 else ""
-            lpost = row[1] if len(row) > 1 else ""
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Klarte ikke laste state fra sheet: %s", exc)
+            await self._notify_admin(f"[vestsk] Klarte ikke laste State-arket: {exc}")
+            return  # state_loaded forblir False og prøver igjen senere
+
+        row = values[0] if values else []
+        lpw = row[0] if len(row) > 0 else ""
+        lpost = row[1] if len(row) > 1 else ""
+
+        try:
             self.last_processed_week = int(lpw) if lpw else None
             self.last_posted_week = int(lpost) if lpost else None
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Klarte ikke laste state fra sheet: %s", exc)
-            admin_channel = self._admin_channel()
-            if admin_channel:
-                await admin_channel.send(
-                    f"[vestsk] Klarte ikke laste State-arket: {exc}"
-                )
-        finally:
-            self.state_loaded = True
+        except ValueError as exc:
+            logger.error("Korrupt state-data i sheet: %s (rad=%s)", exc, row)
+            await self._notify_admin(
+                f"[vestsk] State-arket inneholder ugyldige verdier: {row}"
+            )
+            return  # state_loaded forblir False
 
-    async def _save_state(self):
-        """Persister state i Sheets slik at den overlever restarts/deploys."""
+        self.state_loaded = True
+        logger.info(
+            "State lastet: last_processed_week=%s, last_posted_week=%s",
+            self.last_processed_week,
+            self.last_posted_week,
+        )
+
+    async def _save_state(self) -> bool:
+        """Persister state i Sheets. Returnerer True ved suksess, False ved feil."""
         if not self.state_loaded:
-            return
+            return False
         try:
             state_ws = await self._get_state_sheet()
             await asyncio.to_thread(
@@ -410,18 +439,50 @@ class VestskTipping(commands.Cog):
                 "A2:B2",
                 [
                     [
-                        self.last_processed_week if self.last_processed_week else "",
-                        self.last_posted_week if self.last_posted_week else "",
+                        (
+                            self.last_processed_week
+                            if self.last_processed_week is not None
+                            else ""
+                        ),
+                        (
+                            self.last_posted_week
+                            if self.last_posted_week is not None
+                            else ""
+                        ),
                     ]
                 ],
             )
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Klarte ikke lagre state til sheet: %s", exc)
-            admin_channel = self._admin_channel()
-            if admin_channel:
-                await admin_channel.send(
-                    f"[vestsk] Klarte ikke lagre State-arket: {exc}"
-                )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Klarte ikke lagre state til sheet: %s", exc)
+            self._state_dirty = True
+            await self._notify_admin(f"[vestsk] Klarte ikke lagre State-arket: {exc}")
+            return False
+
+        self._state_dirty = False
+        logger.info(
+            "State lagret: last_processed_week=%s, last_posted_week=%s",
+            self.last_processed_week,
+            self.last_posted_week,
+        )
+        return True
+
+    async def _flush_pending_state(self) -> None:
+        """Prøver på nytt å lagre state hvis forrige lagringsforsøk feilet.
+
+        Kjøres helt i starten av hver løkke-runde i auto_post_scheduler,
+        før markør-sjekkene (last_processed_week/last_posted_week) får
+        avgjøre om noe skal hoppes over. Uten dette kunne en tidligere
+        feilet lagring bli hengende usynkronisert mellom minnet og arket
+        helt til en helt annen, urelatert lagring tilfeldigvis rettet opp i det.
+        """
+        if not self._state_dirty:
+            return
+        logger.info("Prøver å lagre tidligere feilet state på nytt.")
+        saved = await self._save_state()
+        if saved:
+            logger.info("Tidligere feilet state-lagring lyktes nå.")
+        else:
+            logger.warning("State-lagring feiler fortsatt. Prøver igjen neste runde.")
 
     async def _get_nfl_current_week(self) -> int:
         """Hent nåværende NFL-uke fra scoreboard API.
@@ -566,7 +627,13 @@ class VestskTipping(commands.Cog):
             return False
 
         self.last_processed_week = previous_week
-        await self._save_state()
+        saved = await self._save_state()
+        if not saved:
+            logger.warning(
+                "Uke %s prosessert, men lagring av state feilet - "
+                "forsøkes lagret på nytt neste runde.",
+                previous_week,
+            )
         logger.info(
             "Successfully processed week %s. Updated last_processed_week to %s",
             previous_week,
@@ -580,17 +647,31 @@ class VestskTipping(commands.Cog):
         vestsk_channel = self.bot.get_channel(VESTSK_KANAL)
         preik_channel = self.bot.get_channel(PREIK_KANAL)
 
-        if not self.state_loaded:
-            await self._load_state()
-
-        logger.info(
-            "Auto-post scheduler started. Current state: "
-            "last_processed_week=%s, last_posted_week=%s",
-            self.last_processed_week,
-            self.last_posted_week,
-        )
-
         while True:
+            # State må lastes vellykket før vi gjør noe som helst. Hvis
+            # lastingen feiler, venter vi og prøver på nytt - i stedet for å
+            # anta "ingenting er gjort" og risikere dobbeltprosessering.
+            if not self.state_loaded:
+                await self._load_state()
+                if not self.state_loaded:
+                    logger.warning(
+                        "State ikke lastet ennå. Venter 5 min før nytt forsøk."
+                    )
+                    await asyncio.sleep(300)
+                    continue
+
+                logger.info(
+                    "Auto-post scheduler startet. Current state: "
+                    "last_processed_week=%s, last_posted_week=%s",
+                    self.last_processed_week,
+                    self.last_posted_week,
+                )
+
+            # Prøv å lagre state på nytt hvis en tidligere lagring feilet,
+            # FØR markør-sjekkene lenger nede får avgjøre om noe skal
+            # hoppes over. Minsker vinduet der minne og ark kan avvike.
+            await self._flush_pending_state()
+
             try:
                 now = datetime.now(self.norsk_tz)
 
@@ -700,7 +781,13 @@ class VestskTipping(commands.Cog):
                         current_week,
                     )
                     self.last_posted_week = current_week
-                    await self._save_state()
+                    saved = await self._save_state()
+                    if not saved:
+                        logger.warning(
+                            "Uke %s markert som postet, men lagring av state feilet - "
+                            "forsøkes lagret på nytt neste runde.",
+                            current_week,
+                        )
                     await asyncio.sleep(3600)
                     continue
 
@@ -721,7 +808,13 @@ class VestskTipping(commands.Cog):
                 )
 
             self.last_posted_week = current_week
-            await self._save_state()
+            saved = await self._save_state()
+            if not saved:
+                logger.warning(
+                    "Uke %s postet, men lagring av state feilet - "
+                    "forsøkes lagret på nytt neste runde.",
+                    current_week,
+                )
             logger.info(
                 "Auto-postet kamper for uke %s. Updated state: "
                 "last_processed_week=%s, last_posted_week=%s",
