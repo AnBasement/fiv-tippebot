@@ -118,6 +118,7 @@ class VestskTipping(commands.Cog):
         self.last_posted_week = None
         self.last_processed_week = None
         self.state_loaded = False
+        self._state_dirty = False
         task = self.reminder_scheduler()
         self.reminder_task = self.bot.loop.create_task(task)
         self.auto_post_task = self.bot.loop.create_task(self.auto_post_scheduler())
@@ -129,6 +130,21 @@ class VestskTipping(commands.Cog):
         )  # pylint: disable=import-outside-toplevel
 
         return self.bot.get_channel(ADMIN_CHANNEL_ID)
+
+    async def _notify_admin(self, message: str) -> None:
+        """Sender et varsel til admin-kanalen uten å la feil derfra spre seg videre.
+
+        En feilet sending (nettverksfeil, manglende tilgang osv.) skal aldri
+        stoppe kalleren - varslingen er et best-effort-forsøk, ikke noe
+        resten av flyten er avhengig av.
+        """
+        admin_channel = self._admin_channel()
+        if not admin_channel:
+            return
+        try:
+            await admin_channel.send(message)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("Klarte ikke sende admin-varsel: %s", exc)
 
     def get_players(self, sheet) -> dict:
         """
@@ -386,13 +402,9 @@ class VestskTipping(commands.Cog):
         try:
             state_ws = await self._get_state_sheet()
             values = await asyncio.to_thread(state_ws.get, "A2:B2")
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Klarte ikke laste state fra sheet: %s", exc)
-            admin_channel = self._admin_channel()
-            if admin_channel:
-                await admin_channel.send(
-                    f"[vestsk] Klarte ikke laste State-arket: {exc}"
-                )
+            await self._notify_admin(f"[vestsk] Klarte ikke laste State-arket: {exc}")
             return  # state_loaded forblir False og prøver igjen senere
 
         row = values[0] if values else []
@@ -404,11 +416,9 @@ class VestskTipping(commands.Cog):
             self.last_posted_week = int(lpost) if lpost else None
         except ValueError as exc:
             logger.error("Korrupt state-data i sheet: %s (rad=%s)", exc, row)
-            admin_channel = self._admin_channel()
-            if admin_channel:
-                await admin_channel.send(
-                    f"[vestsk] State-arket inneholder ugyldige verdier: {row}"
-                )
+            await self._notify_admin(
+                f"[vestsk] State-arket inneholder ugyldige verdier: {row}"
+            )
             return  # state_loaded forblir False
 
         self.state_loaded = True
@@ -442,21 +452,37 @@ class VestskTipping(commands.Cog):
                     ]
                 ],
             )
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Klarte ikke lagre state til sheet: %s", exc)
-            admin_channel = self._admin_channel()
-            if admin_channel:
-                await admin_channel.send(
-                    f"[vestsk] Klarte ikke lagre State-arket: {exc}"
-                )
+            self._state_dirty = True
+            await self._notify_admin(f"[vestsk] Klarte ikke lagre State-arket: {exc}")
             return False
 
+        self._state_dirty = False
         logger.info(
             "State lagret: last_processed_week=%s, last_posted_week=%s",
             self.last_processed_week,
             self.last_posted_week,
         )
         return True
+
+    async def _flush_pending_state(self) -> None:
+        """Prøver på nytt å lagre state hvis forrige lagringsforsøk feilet.
+
+        Kjøres helt i starten av hver løkke-runde i auto_post_scheduler,
+        før markør-sjekkene (last_processed_week/last_posted_week) får
+        avgjøre om noe skal hoppes over. Uten dette kunne en tidligere
+        feilet lagring bli hengende usynkronisert mellom minnet og arket
+        helt til en helt annen, urelatert lagring tilfeldigvis rettet opp i det.
+        """
+        if not self._state_dirty:
+            return
+        logger.info("Prøver å lagre tidligere feilet state på nytt.")
+        saved = await self._save_state()
+        if saved:
+            logger.info("Tidligere feilet state-lagring lyktes nå.")
+        else:
+            logger.warning("State-lagring feiler fortsatt. Prøver igjen neste runde.")
 
     async def _get_nfl_current_week(self) -> int:
         """Hent nåværende NFL-uke fra scoreboard API.
@@ -605,7 +631,7 @@ class VestskTipping(commands.Cog):
         if not saved:
             logger.warning(
                 "Uke %s prosessert, men lagring av state feilet - "
-                "kan bli reprosessert ved restart.",
+                "forsøkes lagret på nytt neste runde.",
                 previous_week,
             )
         logger.info(
@@ -622,9 +648,9 @@ class VestskTipping(commands.Cog):
         preik_channel = self.bot.get_channel(PREIK_KANAL)
 
         while True:
-            # Steg 5: state må lastes vellykket før vi gjør noe som helst.
-            # Hvis lastingen feiler, venter vi og prøver på nytt - i stedet
-            # for å anta "ingenting er gjort" og risikere dobbeltprosessering.
+            # State må lastes vellykket før vi gjør noe som helst. Hvis
+            # lastingen feiler, venter vi og prøver på nytt - i stedet for å
+            # anta "ingenting er gjort" og risikere dobbeltprosessering.
             if not self.state_loaded:
                 await self._load_state()
                 if not self.state_loaded:
@@ -640,6 +666,11 @@ class VestskTipping(commands.Cog):
                     self.last_processed_week,
                     self.last_posted_week,
                 )
+
+            # Prøv å lagre state på nytt hvis en tidligere lagring feilet,
+            # FØR markør-sjekkene lenger nede får avgjøre om noe skal
+            # hoppes over. Minsker vinduet der minne og ark kan avvike.
+            await self._flush_pending_state()
 
             try:
                 now = datetime.now(self.norsk_tz)
@@ -754,7 +785,7 @@ class VestskTipping(commands.Cog):
                     if not saved:
                         logger.warning(
                             "Uke %s markert som postet, men lagring av state feilet - "
-                            "kan bli reprosessert ved restart.",
+                            "forsøkes lagret på nytt neste runde.",
                             current_week,
                         )
                     await asyncio.sleep(3600)
@@ -781,7 +812,7 @@ class VestskTipping(commands.Cog):
             if not saved:
                 logger.warning(
                     "Uke %s postet, men lagring av state feilet - "
-                    "kan bli reprosessert ved restart.",
+                    "forsøkes lagret på nytt neste runde.",
                     current_week,
                 )
             logger.info(
