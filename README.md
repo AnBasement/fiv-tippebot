@@ -77,13 +77,31 @@ Vær klar over at denne botten er laget spesifikt for en privat server. Det vil 
     pip install -r requirements.txt
     ```
 
-3. Sett opp miljøvariabler i `.env`:
+3. Sett opp miljøvariabler:
 
-    ```env
-    DISCORD_TOKEN=din_discord_bot_token
-    GOOGLE_SHEETS_KEYFILE=sti_til_credentials.json
-    ADMIN_IDS=komma,separert,liste,med,discord,ids
-    ```
+    Kopier `.env.example` til `.env` og fyll inn ekte verdier. Se `.env.example`
+    for full liste med forklaringer. De viktigste:
+
+    | Variabel | Påkrevd | Beskrivelse |
+    |---|---|---|
+    | `DISCORD_TOKEN` | Ja | Bot-token fra Discord Developer Portal |
+    | `ADMIN_IDS` | Ja | Kommaseparert liste med Discord bruker-IDer med admin-tilgang |
+    | `GOOGLE_SHEETS_KEYFILE` | Nei (default `credentials.json`) | Sti til Google service account-nøkkelen |
+    | `ESPN_LEAGUE_ID`, `ESPN_YEAR`, `ESPN_S2`, `ESPN_SWID` | Ja | Tilgang til ESPN Fantasy API for ligaen |
+    | `VESTSK_TIPPING_SHEET_NAME`, `FEST_I_VEST_SHEET_NAME` | Nei (default: de ekte arkene) | Overstyr for å teste mot en kopi av arket |
+    | `PPR_PLAYER_NAMES` | Nei (default: dagens deltakere) | Oppdater ved endring i ligaens deltakere |
+
+    I tillegg trengs én egen fil (ikke en miljøvariabel) i rotmappen som
+    standard - `credentials.json`, Google service account-nøkkelen. Dette
+    er kun standardplasseringen; peker `GOOGLE_SHEETS_KEYFILE` et annet
+    sted, brukes den stien i stedet.
+
+    - `discord_ids.json` - mapping fra ESPN lag-ID til Discord bruker-ID
+
+    Kanal-IDer (`PREIK_KANAL`, `VESTSK_KANAL`, `ADMIN_CHANNEL_ID`) er vanlige
+    konstanter i `data/channel_ids.py`, ikke miljøvariabler - botten kjører
+    per nå kun mot FiV-serveren, så det gir ingen praktisk fordel å gjøre
+    dem konfigurerbare ennå.
 
 4. Start botten:
 

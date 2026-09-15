@@ -15,6 +15,7 @@ from discord.ext import commands
 from core.errors import PPRFetchError, PPRSnapshotError
 from cogs.sheets import get_client
 from data.brukere import TEAM_NAMES
+from data.config import FEST_I_VEST_SHEET_NAME, PPR_PLAYER_NAMES
 
 # Sett opp logging
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class PPR(commands.Cog):
         """
         self.bot = bot
         try:
-            self.sheet = get_client().open("Fest i Vest")
+            self.sheet = get_client().open(FEST_I_VEST_SHEET_NAME)
             logger.info("PPR Cog: Tilkoblet Google Sheets")
         except Exception as e:
             logger.error("PPR Cog: Kunne ikke koble til Google Sheets: %s", e)
@@ -61,16 +62,7 @@ class PPR(commands.Cog):
         Raises:
             PPRFetchError: Hvis PPR-data ikke kan hentes for en spiller.
         """
-        target_names = [
-            "Kristoffer",
-            "Arild",
-            "Knut",
-            "Einar",
-            "Torstein",
-            "Peter",
-            "Edvard H",
-            "Tor",
-        ]
+        target_names = PPR_PLAYER_NAMES
         # Normaliser navn (små bokstaver, trim) for å matche ark med små avvik
         target_names_normalized = {name.strip().lower(): name for name in target_names}
 

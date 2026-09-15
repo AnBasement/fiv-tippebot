@@ -35,6 +35,7 @@ from core.decorators import admin_only
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
 from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
+from data.config import VESTSK_TIPPING_SHEET_NAME
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
@@ -383,7 +384,7 @@ class VestskTipping(commands.Cog):
 
     async def _get_state_sheet(self):
         """Hent eller opprett et lite 'State'-ark i samme Spreadsheet."""
-        base_sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
+        base_sheet = await asyncio.to_thread(get_sheet, VESTSK_TIPPING_SHEET_NAME)
         spreadsheet = base_sheet.spreadsheet
         try:
             return await asyncio.to_thread(spreadsheet.worksheet, "State")
@@ -891,13 +892,13 @@ class VestskTipping(commands.Cog):
     ):  # pylint: disable=unused-argument
         try:
             sheet = await asyncio.wait_for(
-                asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
+                asyncio.to_thread(get_sheet, VESTSK_TIPPING_SHEET_NAME), timeout=10
             )
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         channel = ctx.channel
 
@@ -977,10 +978,10 @@ class VestskTipping(commands.Cog):
                 asyncio.to_thread(sheet.col_values, 1), timeout=10
             )
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         last_data_row = len(all_rows_col_a)
         start_row = last_data_row + 2
@@ -995,10 +996,14 @@ class VestskTipping(commands.Cog):
                         asyncio.to_thread(sheet.range, range_notation), timeout=10
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                    logger.warning(
+                        "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                    )
                     return
                 except Exception as e:  # pylint: disable=broad-exception-caught
-                    logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+                    logger.error(
+                        "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                    )
                     return
                 flat_values = [cell for row in values for cell in row]
                 for cell_obj, val in zip(cell_range, flat_values):
@@ -1008,10 +1013,14 @@ class VestskTipping(commands.Cog):
                         asyncio.to_thread(sheet.update_cells, cell_range), timeout=10
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                    logger.warning(
+                        "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                    )
                     return
                 except Exception as e:  # pylint: disable=broad-exception-caught
-                    logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+                    logger.error(
+                        "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                    )
                     return
             except Exception as e:
                 raise ExportError(
@@ -1033,13 +1042,15 @@ class VestskTipping(commands.Cog):
     async def _resultater_impl(self, ctx, uke: int | None = None):
         try:
             sheet = await asyncio.wait_for(
-                asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
+                asyncio.to_thread(get_sheet, VESTSK_TIPPING_SHEET_NAME), timeout=10
             )
             if not sheet:
-                raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
+                raise ResultaterError(
+                    f"Kunne ikke hente worksheet '{VESTSK_TIPPING_SHEET_NAME}'"
+                )
         except asyncio.TimeoutError as exc:
             raise ResultaterError(
-                "Timeout ved åpning av sheet 'Vestsk Tipping'"
+                f"Timeout ved åpning av sheet '{VESTSK_TIPPING_SHEET_NAME}'"
             ) from exc
         except Exception as e:  # pylint: disable=broad-exception-caught
             raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
@@ -1132,10 +1143,10 @@ class VestskTipping(commands.Cog):
             )
             sheet_rows = all_rows[2:]
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         sheet_kamper = []
         row_mapping = {}
@@ -1178,10 +1189,10 @@ class VestskTipping(commands.Cog):
                 asyncio.to_thread(sheet.range, range_notation), timeout=10
             )
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
         # Lag mapping: (row_idx, col_idx) -> cell_obj
@@ -1250,10 +1261,10 @@ class VestskTipping(commands.Cog):
             uke_label_cell.value = "Ukespoeng"
             cell_updates.append(uke_label_cell)
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
         # Skriv ukespoeng i kolonnene
@@ -1264,10 +1275,14 @@ class VestskTipping(commands.Cog):
                     asyncio.to_thread(sheet.cell, uke_total_row, col_idx), timeout=10
                 )
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+                logger.error(
+                    "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                )
                 return
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
@@ -1280,10 +1295,10 @@ class VestskTipping(commands.Cog):
                 asyncio.to_thread(sheet.get_all_values), timeout=10
             )
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         forrige_sesong_row = None
         for i, row in enumerate(all_sheet_rows, start=1):
@@ -1298,10 +1313,10 @@ class VestskTipping(commands.Cog):
             sesong_label_cell.value = "Sesongpoeng"
             cell_updates.append(sesong_label_cell)
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
         for pidx, _ in enumerate(player_ids):
@@ -1318,10 +1333,14 @@ class VestskTipping(commands.Cog):
                     timeout=10,
                 )
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+                logger.error(
+                    "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                )
                 return
             if str(cell_obj.value) != str(ny_total):
                 cell_obj.value = str(ny_total)
@@ -1334,7 +1353,9 @@ class VestskTipping(commands.Cog):
                     asyncio.to_thread(sheet.update_cells, cell_updates), timeout=10
                 )
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except Exception as e:
                 raise ResultaterError(
@@ -1394,10 +1415,10 @@ class VestskTipping(commands.Cog):
             )
             header_row = header_row[1 : 1 + num_players]
         except asyncio.TimeoutError:
-            logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+            logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+            logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
         discord_msg = []
@@ -1409,10 +1430,14 @@ class VestskTipping(commands.Cog):
                 )
                 sesong_p_cell = sesong_cell.value
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error("Kunne ikke åpne sheet Vestsk Tipping: %s", e)
+                logger.error(
+                    "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                )
                 return
             sesong_p = (
                 int(sesong_p_cell)
