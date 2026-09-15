@@ -91,9 +91,11 @@ Vær klar over at denne botten er laget spesifikt for en privat server. Det vil 
     | `VESTSK_TIPPING_SHEET_NAME`, `FEST_I_VEST_SHEET_NAME` | Nei (default: de ekte arkene) | Overstyr for å teste mot en kopi av arket |
     | `PPR_PLAYER_NAMES` | Nei (default: dagens deltakere) | Oppdater ved endring i ligaens deltakere |
 
-    I tillegg trengs to egne filer (ikke miljøvariabler) i rotmappen:
+    I tillegg trengs én egen fil (ikke en miljøvariabel) i rotmappen som
+    standard - `credentials.json`, Google service account-nøkkelen. Dette
+    er kun standardplasseringen; peker `GOOGLE_SHEETS_KEYFILE` et annet
+    sted, brukes den stien i stedet.
 
-    - `credentials.json` - Google service account-nøkkel
     - `discord_ids.json` - mapping fra ESPN lag-ID til Discord bruker-ID
 
     Kanal-IDer (`PREIK_KANAL`, `VESTSK_KANAL`, `ADMIN_CHANNEL_ID`) er vanlige
