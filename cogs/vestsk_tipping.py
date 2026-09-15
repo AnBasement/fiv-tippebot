@@ -35,6 +35,7 @@ from core.decorators import admin_only
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
 from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
+from data.config import VESTSK_TIPPING_SHEET_NAME
 
 # Konfigurer logging
 logging.basicConfig(level=logging.INFO)
@@ -383,7 +384,7 @@ class VestskTipping(commands.Cog):
 
     async def _get_state_sheet(self):
         """Hent eller opprett et lite 'State'-ark i samme Spreadsheet."""
-        base_sheet = await asyncio.to_thread(get_sheet, "Vestsk Tipping")
+        base_sheet = await asyncio.to_thread(get_sheet, VESTSK_TIPPING_SHEET_NAME)
         spreadsheet = base_sheet.spreadsheet
         try:
             return await asyncio.to_thread(spreadsheet.worksheet, "State")
@@ -891,7 +892,7 @@ class VestskTipping(commands.Cog):
     ):  # pylint: disable=unused-argument
         try:
             sheet = await asyncio.wait_for(
-                asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
+                asyncio.to_thread(get_sheet, VESTSK_TIPPING_SHEET_NAME), timeout=10
             )
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet Vestsk Tipping")
@@ -1033,7 +1034,7 @@ class VestskTipping(commands.Cog):
     async def _resultater_impl(self, ctx, uke: int | None = None):
         try:
             sheet = await asyncio.wait_for(
-                asyncio.to_thread(get_sheet, "Vestsk Tipping"), timeout=10
+                asyncio.to_thread(get_sheet, VESTSK_TIPPING_SHEET_NAME), timeout=10
             )
             if not sheet:
                 raise ResultaterError("Kunne ikke hente worksheet 'Vestsk Tipping'")
