@@ -1,5 +1,4 @@
-"""Sentral konfigurasjon for verdier som bør kunne endres uten kodeendring.
-"""
+"""Sentral konfigurasjon for verdier som bør kunne endres uten kodeendring."""
 
 import os
 
