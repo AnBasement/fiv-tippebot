@@ -7,10 +7,12 @@ oppdaterte rangeringer i Discord.
 
 """
 
-import logging
 import asyncio
-from typing import Dict, List, Any
+import logging
 import os
+from typing import Any, Dict, List
+
+import discord
 import gspread
 import gspread.exceptions
 import requests
@@ -23,6 +25,7 @@ from core.errors import (
 )
 from cogs.sheets import get_client
 from data.brukere import TEAM_NAMES
+from data.channel_ids import ADMIN_CHANNEL_ID
 from data.config import FEST_I_VEST_SHEET_NAME, PPR_PLAYER_NAMES
 
 # Sett opp logging
@@ -53,7 +56,22 @@ class PPR(commands.Cog):
             requests.exceptions.RequestException,
         ) as e:
             logger.error("PPR Cog: Kunne ikke koble til Google Sheets: %s", e)
+            asyncio.get_running_loop().create_task(
+                self._notify_admin(
+                    f"[ppr] PPR Cog: Kunne ikke koble til Google Sheets: {e}"
+                )
+            )
             raise
+
+    async def _notify_admin(self, message: str) -> None:
+        """Sender et best-effort admin-varsel om PPR-feil til Discord."""
+        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
+        if not isinstance(admin_channel, discord.TextChannel):
+            return
+        try:
+            await admin_channel.send(message)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("Klarte ikke sende admin-varsel i PPR: %s", exc)
 
     async def _get_players(self, season: str = "2026") -> List[Dict[str, Any]]:
         """Henter PPR-data for alle spillere for gitt sesong.
@@ -232,7 +250,8 @@ class PPR(commands.Cog):
                 logger.warning("Kunne ikke åpne PPR-historikk: %s", e)
                 rows = []
         except PPRFetchError as e:
-            logger.error("Feil ved henting av PPR-data: %s", str(e))
+            logger.exception("Feil ved henting av PPR-data: %s", str(e))
+            await self._notify_admin(f"[ppr] Feil ved henting av PPR-data: {e}")
             raise
 
         last_snapshot = {}

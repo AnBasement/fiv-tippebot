@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
+import discord
 import pytest
 import pytz
 import gspread.exceptions
@@ -242,9 +243,7 @@ async def test_reminder_scheduler_sunday(monkeypatch):
                                     },
                                     {
                                         "homeAway": "away",
-                                        "team": {
-                                            "displayName": "New England Patriots"
-                                        },
+                                        "team": {"displayName": "New England Patriots"},
                                     },
                                 ]
                             }
@@ -393,6 +392,23 @@ class TestSaveState:
 
         assert saved is False
         assert cog._state_dirty is True
+        cog._notify_admin.assert_awaited_once()
+
+
+class TestProcessPreviousWeek:
+    @pytest.mark.asyncio
+    async def test_notifies_admin_when_export_step_fails(self):
+        cog = make_cog(last_processed_week=2)
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.send = AsyncMock()
+        cog._export_impl = AsyncMock(side_effect=RuntimeError("Sheets nede"))
+        cog._resultater_impl = AsyncMock()
+        cog._save_state = AsyncMock(return_value=True)
+        cog._notify_admin = AsyncMock()
+
+        result = await cog._process_previous_week(current_week=4, channel=channel)
+
+        assert result is False
         cog._notify_admin.assert_awaited_once()
 
 

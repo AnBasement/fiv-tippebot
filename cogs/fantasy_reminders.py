@@ -43,6 +43,16 @@ class FantasyReminders(commands.Cog):
         self.bot.loop.create_task(self.reminder_scheduler())
         self.bot.loop.create_task(self.inactive_alert_scheduler())
 
+    async def _notify_admin(self, message: str) -> None:
+        """Best-effort varsling til admin-kanalen for bakgrunnsfeil."""
+        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
+        if not isinstance(admin_channel, discord.TextChannel):
+            return
+        try:
+            await admin_channel.send(message)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("Klarte ikke sende admin-varsel i FantasyReminders: %s", exc)
+
     def _current_streak(self, team):
         length = getattr(team, "streak_length", 0)
         streak_type = getattr(team, "streak_type", "")
@@ -333,6 +343,9 @@ class FantasyReminders(commands.Cog):
                                 # logger.exception fanger full traceback, så
                                 # uventede feil forsvinner ikke stille.
                                 logger.exception("Feil i matchup digest: %s", exc)
+                                await self._notify_admin(
+                                    f"[fantasy_reminders] Feil i matchup digest: {exc}"
+                                )
                                 await channel.send(
                                     "Kunne ikke generere matchup-digest denne uken."
                                 )
@@ -364,7 +377,12 @@ class FantasyReminders(commands.Cog):
             except Exception as e:  # pylint: disable=broad-exception-caught
                 # Bevisst bredt: dette er selve scheduler-løkken - den skal
                 # aldri dø av en uventet feil, bare logge den og prøve igjen.
-                logger.error("Feil i FantasyReminders: %s. Prøver igjen om 5 min.", e)
+                logger.exception(
+                    "Feil i FantasyReminders: %s. Prøver igjen om 5 min.", e
+                )
+                await self._notify_admin(
+                    f"[fantasy_reminders] Feil i FantasyReminders: {e}. Prøver igjen om 5 min."
+                )
                 await asyncio.sleep(300)
 
     def _player_kickoff(self, player) -> datetime | None:
@@ -511,9 +529,13 @@ class FantasyReminders(commands.Cog):
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 # Bevisst bredt: én mislykket sjekk-runde skal ikke stoppe
                 # den periodiske overvåkningen resten av botens levetid.
-                logger.error(
+                logger.exception(
                     "Feil ved sjekk av inaktive spillere: %s. Prøver igjen om 10 min.",
                     exc,
+                )
+                await self._notify_admin(
+                    "[fantasy_reminders] Feil ved sjekk av inaktive spillere: "
+                    f"{exc}. Prøver igjen om 10 min."
                 )
             await asyncio.sleep(600)
 

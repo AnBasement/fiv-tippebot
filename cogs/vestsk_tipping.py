@@ -40,7 +40,7 @@ from core.errors import (
 )
 from core.decorators import admin_only
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
+from data.channel_ids import ADMIN_CHANNEL_ID, PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 from data.config import VESTSK_TIPPING_SHEET_NAME
 
@@ -133,9 +133,6 @@ class VestskTipping(commands.Cog):
 
     def _admin_channel(self) -> discord.TextChannel | None:
         """Get the admin error reporting channel."""
-        from data.channel_ids import (
-            ADMIN_CHANNEL_ID,
-        )  # pylint: disable=import-outside-toplevel
 
         return self.bot.get_channel(ADMIN_CHANNEL_ID)
 
@@ -391,7 +388,12 @@ class VestskTipping(commands.Cog):
             except Exception as e:  # pylint: disable=broad-exception-caught
                 # Bevisst bredt: selve påminnelse-løkken skal aldri dø av
                 # en uventet feil, bare logge den og prøve igjen.
-                logger.error("Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e)
+                logger.exception(
+                    "Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e
+                )
+                await self._notify_admin(
+                    f"[vestsk] Feil i reminder_scheduler: {e}. Prøver igjen om 5 min."
+                )
                 await asyncio.sleep(300)
 
     async def _get_state_sheet(self):
@@ -637,6 +639,9 @@ class VestskTipping(commands.Cog):
             # (Sheets + Discord-historikk + dataparsing). Uansett hva som
             # går galt der, skal ikke auto_post_scheduler-løkken dø av det.
             logger.error("Klarte ikke eksportere for uke %s: %s", previous_week, exc)
+            await self._notify_admin(
+                f"[vestsk] Klarte ikke eksportere for uke {previous_week}: {exc}"
+            )
             return False
 
         try:
@@ -646,6 +651,9 @@ class VestskTipping(commands.Cog):
             # Samme begrunnelse som over.
             logger.error(
                 "Klarte ikke beregne resultater for uke %s: %s", previous_week, exc
+            )
+            await self._notify_admin(
+                f"[vestsk] Klarte ikke beregne resultater for uke {previous_week}: {exc}"
             )
             return False
 
@@ -929,8 +937,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1015,8 +1023,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1033,13 +1041,17 @@ class VestskTipping(commands.Cog):
                         asyncio.to_thread(sheet.range, range_notation), timeout=10
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
+                    logger.warning(
+                        "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                    )
                     return
                 except (
-                        gspread.exceptions.GSpreadException,
-                        requests.exceptions.RequestException,
+                    gspread.exceptions.GSpreadException,
+                    requests.exceptions.RequestException,
                 ) as e:
-                    logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
+                    logger.error(
+                        "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                    )
                     return
                 flat_values = [cell for row in values for cell in row]
                 for cell_obj, val in zip(cell_range, flat_values):
@@ -1049,13 +1061,17 @@ class VestskTipping(commands.Cog):
                         asyncio.to_thread(sheet.update_cells, cell_range), timeout=10
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
+                    logger.warning(
+                        "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                    )
                     return
                 except (
-                        gspread.exceptions.GSpreadException,
-                        requests.exceptions.RequestException,
+                    gspread.exceptions.GSpreadException,
+                    requests.exceptions.RequestException,
                 ) as e:
-                    logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
+                    logger.error(
+                        "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                    )
                     return
             except (TypeError, ValueError, IndexError, AttributeError) as e:
                 raise ExportError(
@@ -1184,8 +1200,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1233,8 +1249,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1308,8 +1324,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1322,13 +1338,17 @@ class VestskTipping(commands.Cog):
                     asyncio.to_thread(sheet.cell, uke_total_row, col_idx), timeout=10
                 )
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except (
-                    gspread.exceptions.GSpreadException,
-                    requests.exceptions.RequestException,
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
             ) as e:
-                logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
+                logger.error(
+                    "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                )
                 return
             poeng = uke_poeng[pidx]
             if str(cell_obj.value) != str(poeng):
@@ -1344,8 +1364,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1365,8 +1385,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1385,13 +1405,17 @@ class VestskTipping(commands.Cog):
                     timeout=10,
                 )
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except (
-                    gspread.exceptions.GSpreadException,
-                    requests.exceptions.RequestException,
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
             ) as e:
-                logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
+                logger.error(
+                    "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                )
                 return
             if str(cell_obj.value) != str(ny_total):
                 cell_obj.value = str(ny_total)
@@ -1404,7 +1428,9 @@ class VestskTipping(commands.Cog):
                     asyncio.to_thread(sheet.update_cells, cell_updates), timeout=10
                 )
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except (
                 gspread.exceptions.GSpreadException,
@@ -1476,8 +1502,8 @@ class VestskTipping(commands.Cog):
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
         except (
-                gspread.exceptions.GSpreadException,
-                requests.exceptions.RequestException,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
         ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
@@ -1491,13 +1517,17 @@ class VestskTipping(commands.Cog):
                 )
                 sesong_p_cell = sesong_cell.value
             except asyncio.TimeoutError:
-                logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
+                logger.warning(
+                    "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
+                )
                 return
             except (
-                    gspread.exceptions.GSpreadException,
-                    requests.exceptions.RequestException,
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
             ) as e:
-                logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
+                logger.error(
+                    "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
+                )
                 return
             sesong_p = (
                 int(sesong_p_cell)
