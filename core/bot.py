@@ -90,6 +90,8 @@ async def main():
             except commands.ExtensionFailed as e:
                 print(f"[COG] FEIL ved lasting av {cog}: {e}")
             except Exception as e:  # pylint: disable=broad-exception-caught
+                # Bevisst bred: én cog med en uventet feil skal ikke hindre
+                # de andre cogene i å lastes og botten i å starte opp.
                 print(f"[COG] Uventet feil ved lasting av {cog}: {e}")
 
         if TOKEN is None:
