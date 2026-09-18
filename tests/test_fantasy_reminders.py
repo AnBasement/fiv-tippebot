@@ -92,6 +92,20 @@ class TestFantasyReminders:
 
             mock_channel.send.assert_not_called()
 
+    def test_player_kickoff_normalizes_naive_datetime(self, mock_bot):
+        """Tester at naive kickoff-datoer blir normalisert til aware datetime."""
+        with patch.object(FantasyReminders, "reminder_scheduler", return_value=None):
+            cog = FantasyReminders(mock_bot)
+
+        player = Mock()
+        player.game_date = datetime(2024, 1, 1, 18, 0, 0)
+
+        kickoff = cog._player_kickoff(player)
+
+        assert kickoff is not None
+        assert kickoff.tzinfo is not None
+        assert kickoff.utcoffset() is not None
+
     @pytest.mark.asyncio
     async def test_setup_function(self, mock_bot):
         """Tester at setup-funksjonen virker."""

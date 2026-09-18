@@ -385,6 +385,13 @@ class FantasyReminders(commands.Cog):
                 )
                 await asyncio.sleep(300)
 
+    @staticmethod
+    def _ensure_aware_datetime(value: datetime, default_tz: timezone | pytz.tzinfo.BaseTzInfo = timezone.utc) -> datetime:
+        """Gjør en datetime timezone-aware uten å endre selve klokkeslettet."""
+        if value.tzinfo is not None:
+            return value.astimezone(default_tz)
+        return value.replace(tzinfo=default_tz)
+
     def _player_kickoff(self, player) -> datetime | None:
         """Henter forventet kampstart for en spiller så nøyaktig som mulig.
 
@@ -396,7 +403,7 @@ class FantasyReminders(commands.Cog):
         for attr in ("game_date", "gameDate", "game_start_time", "game_start"):
             kickoff = getattr(player, attr, None)
             if isinstance(kickoff, datetime):
-                return kickoff
+                return self._ensure_aware_datetime(kickoff, timezone.utc)
             if isinstance(kickoff, (int, float)):
                 return datetime.fromtimestamp(kickoff / 1000, tz=timezone.utc)
 
@@ -412,7 +419,7 @@ class FantasyReminders(commands.Cog):
             for game in games:
                 date_val = game.get("date")
                 if isinstance(date_val, datetime):
-                    upcoming.append(date_val)
+                    upcoming.append(self._ensure_aware_datetime(date_val, timezone.utc))
                 elif isinstance(date_val, (int, float)):
                     upcoming.append(
                         datetime.fromtimestamp(date_val / 1000, tz=timezone.utc)
@@ -472,6 +479,7 @@ class FantasyReminders(commands.Cog):
 
                         kickoff = self._player_kickoff(player)
                         if kickoff:
+                            kickoff = self._ensure_aware_datetime(kickoff, timezone.utc)
                             kickoff = kickoff.astimezone(self.norsk_tz)
                             seconds_to_kickoff = (kickoff - now).total_seconds()
                             if seconds_to_kickoff < 0 or seconds_to_kickoff > 3600:
