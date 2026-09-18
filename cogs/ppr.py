@@ -71,7 +71,7 @@ class PPR(commands.Cog):
         try:
             await admin_channel.send(message)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.warning("Klarte ikke sende admin-varsel i PPR: %s", exc)
+            logger.exception("Klarte ikke sende admin-varsel i PPR: %s", exc)
 
     async def _get_players(self, season: str = "2026") -> List[Dict[str, Any]]:
         """Henter PPR-data for alle spillere for gitt sesong.
