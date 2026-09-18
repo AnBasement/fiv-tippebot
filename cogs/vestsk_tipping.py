@@ -1482,6 +1482,10 @@ class VestskTipping(commands.Cog):
                     ),
                     timeout=10,
                 )
+            except asyncio.TimeoutError as exc:
+                raise ResultaterError(
+                    "Timeout ved batch-formatering av celler"
+                ) from exc
             except (
                 gspread.exceptions.GSpreadException,
                 requests.exceptions.RequestException,
