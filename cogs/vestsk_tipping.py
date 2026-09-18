@@ -20,6 +20,13 @@ import aiohttp
 from aiohttp import ClientTimeout
 import pytz
 import discord
+import gspread.exceptions
+import requests
+from espn_api.requests.espn_requests import (
+    ESPNAccessDenied,
+    ESPNInvalidLeague,
+    ESPNUnknownError,
+)
 from discord.ext import commands
 from discord.ext.commands import CheckFailure
 from gspread.exceptions import WorksheetNotFound
@@ -33,7 +40,7 @@ from core.errors import (
 )
 from core.decorators import admin_only
 from data.teams import teams, team_emojis, team_location, DRAW_EMOJI
-from data.channel_ids import PREIK_KANAL, VESTSK_KANAL
+from data.channel_ids import ADMIN_CHANNEL_ID, PREIK_KANAL, VESTSK_KANAL
 from cogs.sheets import get_sheet, green_format, red_format, yellow_format
 from data.config import VESTSK_TIPPING_SHEET_NAME
 
@@ -126,9 +133,6 @@ class VestskTipping(commands.Cog):
 
     def _admin_channel(self) -> discord.TextChannel | None:
         """Get the admin error reporting channel."""
-        from data.channel_ids import (
-            ADMIN_CHANNEL_ID,
-        )  # pylint: disable=import-outside-toplevel
 
         return self.bot.get_channel(ADMIN_CHANNEL_ID)
 
@@ -145,6 +149,9 @@ class VestskTipping(commands.Cog):
         try:
             await admin_channel.send(message)
         except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Bevisst bredt: dette er selve sikkerhetsnettet mot at en
+            # feilet varsling kan stoppe scheduler-løkken (se PR-historikk
+            # for hvorfor - CodeRabbit fanget opp nøyaktig dette scenarioet).
             logger.warning("Klarte ikke sende admin-varsel: %s", exc)
 
     def get_players(self, sheet) -> dict:
@@ -232,7 +239,7 @@ class VestskTipping(commands.Cog):
                     await asyncio.sleep(5)
                     async with session.get(url) as resp:
                         data = await resp.json()
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             raise APIFetchError(url, e) from e
 
         events = data.get("events", [])
@@ -310,7 +317,7 @@ class VestskTipping(commands.Cog):
                                 await asyncio.sleep(5)
                                 async with session.get(url) as resp:
                                     data = await resp.json()
-                    except Exception as e:  # pylint: disable=broad-exception-caught
+                    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
                         logger.error(
                             "Kunne ikke hente data fra ESPN API: %s. Prøver igjen om 5 min.",
                             e,
@@ -379,7 +386,14 @@ class VestskTipping(commands.Cog):
                 await asyncio.sleep(sleep_seconds)
 
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error("Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e)
+                # Bevisst bredt: selve påminnelse-løkken skal aldri dø av
+                # en uventet feil, bare logge den og prøve igjen.
+                logger.exception(
+                    "Feil i reminder_scheduler: %s. Prøver igjen om 5 min.", e
+                )
+                await self._notify_admin(
+                    f"[vestsk] Feil i reminder_scheduler: {e}. Prøver igjen om 5 min."
+                )
                 await asyncio.sleep(300)
 
     async def _get_state_sheet(self):
@@ -403,7 +417,10 @@ class VestskTipping(commands.Cog):
         try:
             state_ws = await self._get_state_sheet()
             values = await asyncio.to_thread(state_ws.get, "A2:B2")
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as exc:
             logger.error("Klarte ikke laste state fra sheet: %s", exc)
             await self._notify_admin(f"[vestsk] Klarte ikke laste State-arket: {exc}")
             return  # state_loaded forblir False og prøver igjen senere
@@ -453,7 +470,10 @@ class VestskTipping(commands.Cog):
                     ]
                 ],
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as exc:
             logger.error("Klarte ikke lagre state til sheet: %s", exc)
             self._state_dirty = True
             await self._notify_admin(f"[vestsk] Klarte ikke lagre State-arket: {exc}")
@@ -498,7 +518,7 @@ class VestskTipping(commands.Cog):
             ) as session:
                 async with session.get(url) as resp:
                     data = await resp.json()
-        except Exception as e:  # pylint: disable=broad-except
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             logger.error("Kunne ikke hente NFL current_week: %s", e)
             # Fallback til fantasy week hvis API feiler
             league = get_league()
@@ -615,15 +635,25 @@ class VestskTipping(commands.Cog):
             logger.info("Running export for week %s", previous_week)
             await self._export_impl(ctx, previous_week)
         except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Bevisst bredt: _export_impl er et helt sammensatt delsteg
+            # (Sheets + Discord-historikk + dataparsing). Uansett hva som
+            # går galt der, skal ikke auto_post_scheduler-løkken dø av det.
             logger.error("Klarte ikke eksportere for uke %s: %s", previous_week, exc)
+            await self._notify_admin(
+                f"[vestsk] Klarte ikke eksportere for uke {previous_week}: {exc}"
+            )
             return False
 
         try:
             logger.info("Running resultater for week %s", previous_week)
             await self._resultater_impl(ctx, previous_week)
         except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Samme begrunnelse som over.
             logger.error(
                 "Klarte ikke beregne resultater for uke %s: %s", previous_week, exc
+            )
+            await self._notify_admin(
+                f"[vestsk] Klarte ikke beregne resultater for uke {previous_week}: {exc}"
             )
             return False
 
@@ -698,7 +728,16 @@ class VestskTipping(commands.Cog):
                     self.last_processed_week,
                     self.last_posted_week,
                 )
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            except (
+                aiohttp.ClientError,
+                asyncio.TimeoutError,
+                ValueError,
+                TypeError,
+                requests.exceptions.RequestException,
+                ESPNAccessDenied,
+                ESPNInvalidLeague,
+                ESPNUnknownError,
+            ) as exc:
                 logger.error(
                     "Klarte ikke hente league-info for autopost: %s. Prøver igjen om 1 time.",
                     exc,
@@ -755,7 +794,7 @@ class VestskTipping(commands.Cog):
                 )
                 await asyncio.sleep(3600)
                 continue
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            except APIFetchError as exc:
                 logger.error(
                     "Feil ved henting av kamper for uke %s: %s. Prøver igjen om 1 time.",
                     current_week,
@@ -772,7 +811,7 @@ class VestskTipping(commands.Cog):
             if isinstance(vestsk_channel, discord.TextChannel):
                 try:
                     already = await self._events_posted_recently(events, vestsk_channel)
-                except Exception as exc:  # pylint: disable=broad-exception-caught
+                except discord.HTTPException as exc:
                     logger.warning("Kunne ikke sjekke historikk: %s", exc)
                     already = False
                 if already:
@@ -897,7 +936,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         channel = ctx.channel
@@ -980,7 +1022,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         last_data_row = len(all_rows_col_a)
@@ -1000,7 +1045,10 @@ class VestskTipping(commands.Cog):
                         "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
                     )
                     return
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except (
+                    gspread.exceptions.GSpreadException,
+                    requests.exceptions.RequestException,
+                ) as e:
                     logger.error(
                         "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
                     )
@@ -1017,12 +1065,15 @@ class VestskTipping(commands.Cog):
                         "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
                     )
                     return
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except (
+                    gspread.exceptions.GSpreadException,
+                    requests.exceptions.RequestException,
+                ) as e:
                     logger.error(
                         "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
                     )
                     return
-            except Exception as e:
+            except (TypeError, ValueError, IndexError, AttributeError) as e:
                 raise ExportError(
                     f"Feil ved eksport til sheet '{sheet.title}': {e}"
                 ) from e
@@ -1052,7 +1103,10 @@ class VestskTipping(commands.Cog):
             raise ResultaterError(
                 f"Timeout ved åpning av sheet '{VESTSK_TIPPING_SHEET_NAME}'"
             ) from exc
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             raise ResultaterError(f"Feil ved henting av sheet: {e}") from e
 
         logger.debug("Henter sheet: %s", sheet.title if sheet else "None")
@@ -1092,7 +1146,7 @@ class VestskTipping(commands.Cog):
                     # Retry once
                     async with session.get(url) as resp:
                         data = await resp.json()
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             raise APIFetchError(url, e) from e
 
         events = data.get("events", [])
@@ -1119,7 +1173,7 @@ class VestskTipping(commands.Cog):
 
                 home_score = int(home["score"])
                 away_score = int(away["score"])
-            except Exception as e:
+            except (KeyError, IndexError, StopIteration, TypeError, ValueError) as e:
                 raise ResultaterError(
                     "Feil ved parsing av kampdata for " f"{ev.get('id', 'ukjent')}"
                 ) from e
@@ -1145,7 +1199,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         sheet_kamper = []
@@ -1191,7 +1248,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
@@ -1263,7 +1323,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
@@ -1279,7 +1342,10 @@ class VestskTipping(commands.Cog):
                     "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
                 )
                 return
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+            ) as e:
                 logger.error(
                     "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
                 )
@@ -1297,7 +1363,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
         forrige_sesong_row = None
@@ -1315,7 +1384,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
@@ -1337,7 +1409,10 @@ class VestskTipping(commands.Cog):
                     "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
                 )
                 return
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+            ) as e:
                 logger.error(
                     "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
                 )
@@ -1357,7 +1432,10 @@ class VestskTipping(commands.Cog):
                     "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
                 )
                 return
-            except Exception as e:
+            except (
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+            ) as e:
                 raise ResultaterError(
                     f"Feil ved batch-oppdatering av celler: {e}"
                 ) from e
@@ -1367,14 +1445,17 @@ class VestskTipping(commands.Cog):
         # Finn sheetId for arket
         try:
             sheet_id = sheet.id  # type: ignore[attr-defined]
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except AttributeError as e:
             raise ResultaterError(f"Kunne ikke hente sheetId: {e}") from e
 
-        # Lag batchUpdate-requests for alle celler som skal formateres
-        requests = []
+        # Lag batchUpdate-requests for alle celler som skal formateres.
+        # NB: kalt batch_requests, ikke requests - unngår å skygge for den
+        # importerte requests-modulen (requests.exceptions.RequestException
+        # brukes andre steder i denne funksjonen).
+        batch_requests = []
         for row_idx, col_idx, fmt in format_updates:
             # fmt er cellFormat-dict, f.eks. fra green_format()
-            requests.append(
+            batch_requests.append(
                 {
                     "repeatCell": {
                         "range": {
@@ -1393,15 +1474,22 @@ class VestskTipping(commands.Cog):
                 }
             )
 
-        if requests:
+        if batch_requests:
             try:
                 await asyncio.wait_for(
                     asyncio.to_thread(
-                        sheet.spreadsheet.batch_update, {"requests": requests}
+                        sheet.spreadsheet.batch_update, {"requests": batch_requests}
                     ),
                     timeout=10,
                 )
-            except Exception as e:
+            except asyncio.TimeoutError as exc:
+                raise ResultaterError(
+                    "Timeout ved batch-formatering av celler"
+                ) from exc
+            except (
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+            ) as e:
                 raise ResultaterError(
                     f"Feil ved batch-formattering av celler: {e}"
                 ) from e
@@ -1417,7 +1505,10 @@ class VestskTipping(commands.Cog):
         except asyncio.TimeoutError:
             logger.warning("Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME)
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e)
             return
 
@@ -1434,7 +1525,10 @@ class VestskTipping(commands.Cog):
                     "Timeout ved åpning av sheet %s", VESTSK_TIPPING_SHEET_NAME
                 )
                 return
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+            ) as e:
                 logger.error(
                     "Kunne ikke åpne sheet %s: %s", VESTSK_TIPPING_SHEET_NAME, e
                 )

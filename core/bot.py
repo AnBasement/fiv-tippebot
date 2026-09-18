@@ -1,7 +1,9 @@
 """Oppstart og hendelser for Discord-botten."""
 
-import os
 import asyncio
+import logging
+import os
+
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -45,6 +47,20 @@ async def on_ready():
     print(f"✅ Botten er logget inn som {bot.user}")
 
 
+async def notify_admin_channel(message: str) -> None:
+    """Sender en best-effort melding til admin-kanalen og logger den i Render."""
+    admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
+    if not isinstance(admin_channel, discord.TextChannel):
+        logging.getLogger(__name__).warning("Adminkanal ikke satt opp: %s", message)
+        return
+    try:
+        await admin_channel.send(message)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logging.getLogger(__name__).warning(
+            "Klarte ikke sende admin-varsel til Discord: %s", exc
+        )
+
+
 # --- Global error handler ---
 @bot.event
 async def on_command_error(ctx, error):
@@ -67,13 +83,16 @@ async def on_command_error(ctx, error):
         # Andre exceptions
         error_msg = f"❌ Uventet feil i `{ctx.command}`:\n```{error}```"
 
-    # Send til admin-kanal
-    admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
-    if admin_channel and isinstance(admin_channel, discord.TextChannel):
-        await admin_channel.send(error_msg)
+    await notify_admin_channel(error_msg)
 
-    # Logg i terminal
+    # Logg i terminal / Render
     print(f"[ERROR] Command: {ctx.command}, User: {ctx.author}, Error: {error}")
+    logging.getLogger(__name__).error(
+        "Command error for %s: %s",
+        ctx.command,
+        error,
+        exc_info=(type(error), error, error.__traceback__),
+    )
 
 
 # === Main async startup ===
@@ -87,10 +106,19 @@ async def main():
                 print(f"[COG] Lastet {cog}")
             except commands.ExtensionNotFound as e:
                 print(f"[COG] Ikke funnet: {cog} ({e})")
+                await notify_admin_channel(f"[startup] Cog ikke funnet: {cog} ({e})")
             except commands.ExtensionFailed as e:
                 print(f"[COG] FEIL ved lasting av {cog}: {e}")
+                await notify_admin_channel(
+                    f"[startup] Klarte ikke laste cog {cog}: {e}"
+                )
             except Exception as e:  # pylint: disable=broad-exception-caught
+                # Bevisst bred: én cog med en uventet feil skal ikke hindre
+                # de andre cogene i å lastes og botten i å starte opp.
                 print(f"[COG] Uventet feil ved lasting av {cog}: {e}")
+                await notify_admin_channel(
+                    f"[startup] Uventet feil ved lasting av {cog}: {e}"
+                )
 
         if TOKEN is None:
             raise ValueError("TOKEN ikke definert i miljøvariabler")

@@ -7,8 +7,12 @@ feilsituasjoner og gir feilmeldinger.
 """
 
 from typing import List, Dict, Any
+import logging
 import os
 import gspread
+import gspread.exceptions
+import google.auth.exceptions
+import requests
 from google.oauth2.service_account import Credentials
 from gspread_formatting import format_cell_range
 from gspread.worksheet import Worksheet
@@ -19,6 +23,9 @@ from core.errors import (
     ClientAuthorizationError,
     SheetNotFoundError,
 )
+
+logger = logging.getLogger(__name__)
+
 
 # Definerer hvilke Google API-tilganger som trengs
 scope: List[str] = [
@@ -41,7 +48,9 @@ def get_creds() -> Credentials:
         raise MissingCredentialsError(f"Kunne ikke finne credentials-filen: {keyfile}")
     try:
         return Credentials.from_service_account_file(keyfile, scopes=scope)
-    except Exception as e:
+    except (ValueError, KeyError, OSError) as e:
+        # ValueError/KeyError: ugyldig eller ufullstendig JSON i filen.
+        # OSError: filen finnes (sjekket over), men kan f.eks. ikke leses.
         raise MissingCredentialsError(
             f"Feil ved lesing av credentials {keyfile}: {str(e)}"
         ) from e
@@ -62,7 +71,11 @@ def get_client() -> Client:
         return gspread.authorize(creds)
     except MissingCredentialsError:
         raise
-    except Exception as e:
+    except (
+        google.auth.exceptions.GoogleAuthError,
+        gspread.exceptions.GSpreadException,
+        requests.exceptions.RequestException,
+    ) as e:
         raise ClientAuthorizationError(
             f"Kunne ikke autorisere mot Google: {str(e)}"
         ) from e
@@ -90,7 +103,10 @@ def get_sheet(sheet_name: str, worksheet_index: int = 0) -> Worksheet:
         raise SheetNotFoundError(
             sheet_name, worksheet_index, f"Fant ikke dokumentet '{sheet_name}'"
         ) from None
-    except Exception as e:
+    except (
+        gspread.exceptions.GSpreadException,
+        requests.exceptions.RequestException,
+    ) as e:
         raise SheetNotFoundError(
             sheet_name, worksheet_index, f"Feil ved åpning av dokument: {str(e)}"
         ) from e
@@ -111,9 +127,12 @@ def format_cell(
         col_letter = chr(64 + col)  # Konverterer kolonnenummer til bokstav
         cell_range = f"{col_letter}{row}"
         format_cell_range(sheet, cell_range, color_fmt)
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (
+        gspread.exceptions.GSpreadException,
+        requests.exceptions.RequestException,
+    ) as e:
         # Logger feilen men lar den fortsette siden formatering ikke er kritisk
-        print(f"Advarsel: Kunne ikke formatere celle {col_letter}{row}: {str(e)}")
+        logger.warning("Kunne ikke formatere celle %s%s: %s", col_letter, row, e)
 
 
 def green_format() -> Dict[str, Any]:

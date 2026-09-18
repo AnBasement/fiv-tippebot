@@ -7,14 +7,25 @@ oppdaterte rangeringer i Discord.
 
 """
 
-import logging
 import asyncio
-from typing import Dict, List, Any
+import logging
 import os
+from typing import Any, Dict, List
+
+import discord
+import gspread
+import gspread.exceptions
+import requests
 from discord.ext import commands
-from core.errors import PPRFetchError, PPRSnapshotError
+from core.errors import (
+    PPRFetchError,
+    PPRSnapshotError,
+    MissingCredentialsError,
+    ClientAuthorizationError,
+)
 from cogs.sheets import get_client
 from data.brukere import TEAM_NAMES
+from data.channel_ids import ADMIN_CHANNEL_ID
 from data.config import FEST_I_VEST_SHEET_NAME, PPR_PLAYER_NAMES
 
 # Sett opp logging
@@ -38,9 +49,29 @@ class PPR(commands.Cog):
         try:
             self.sheet = get_client().open(FEST_I_VEST_SHEET_NAME)
             logger.info("PPR Cog: Tilkoblet Google Sheets")
-        except Exception as e:
+        except (
+            MissingCredentialsError,
+            ClientAuthorizationError,
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             logger.error("PPR Cog: Kunne ikke koble til Google Sheets: %s", e)
+            asyncio.get_running_loop().create_task(
+                self._notify_admin(
+                    f"[ppr] PPR Cog: Kunne ikke koble til Google Sheets: {e}"
+                )
+            )
             raise
+
+    async def _notify_admin(self, message: str) -> None:
+        """Sender et best-effort admin-varsel om PPR-feil til Discord."""
+        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
+        if not isinstance(admin_channel, discord.TextChannel):
+            return
+        try:
+            await admin_channel.send(message)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.exception("Klarte ikke sende admin-varsel i PPR: %s", exc)
 
     async def _get_players(self, season: str = "2026") -> List[Dict[str, Any]]:
         """Henter PPR-data for alle spillere for gitt sesong.
@@ -103,7 +134,19 @@ class PPR(commands.Cog):
                         ws.title, season, f"Fant ingen rad for sesong {season}"
                     )
 
-            except Exception as e:
+            except PPRFetchError:
+                # Allerede en velformet feil (f.eks. "fant ingen rad for
+                # sesong") reist lenger opp i try-blokken - ikke pakk den
+                # inn i en ny PPRFetchError.
+                raise
+            except asyncio.TimeoutError:
+                raise PPRFetchError(
+                    ws.title, season, "Tidsavbrudd ved lesing av ark"
+                ) from None
+            except (
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+            ) as e:
                 raise PPRFetchError(
                     ws.title, season, f"Feil ved lesing av ark: {str(e)}"
                 ) from e
@@ -128,7 +171,7 @@ class PPR(commands.Cog):
         try:
             history_ws = self.sheet.worksheet("PPR-historikk")
             logger.debug("Fant eksisterende PPR-historikk ark")
-        except Exception:  # pylint: disable=broad-exception-caught
+        except gspread.exceptions.WorksheetNotFound:
             logger.info("Oppretter nytt PPR-historikk ark")
             history_ws = self.sheet.add_worksheet(
                 title="PPR-historikk", rows=1000, cols=10
@@ -166,7 +209,12 @@ class PPR(commands.Cog):
             )
             logger.info("Lagret snapshot med %s PPR-verdier", num_rows)
 
-        except Exception as e:
+        except asyncio.TimeoutError as e:
+            raise PPRSnapshotError("Tidsavbrudd ved lagring av PPR snapshot") from e
+        except (
+            gspread.exceptions.GSpreadException,
+            requests.exceptions.RequestException,
+        ) as e:
             raise PPRSnapshotError(f"Kunne ikke lagre PPR snapshot: {str(e)}") from e
 
     @commands.command(name="ppr")
@@ -193,11 +241,17 @@ class PPR(commands.Cog):
                     asyncio.to_thread(history_ws.get_all_values), timeout=10
                 )
                 logger.debug("Hentet %s historiske PPR-verdier", len(rows))
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"[DEBUG] Kunne ikke åpne PPR-historikk: {e}")
+            except (
+                gspread.exceptions.WorksheetNotFound,
+                gspread.exceptions.GSpreadException,
+                requests.exceptions.RequestException,
+                asyncio.TimeoutError,
+            ) as e:
+                logger.warning("Kunne ikke åpne PPR-historikk: %s", e)
                 rows = []
-        except Exception as e:
-            logger.error("Feil ved henting av PPR-data: %s", str(e))
+        except PPRFetchError as e:
+            logger.exception("Feil ved henting av PPR-data: %s", str(e))
+            await self._notify_admin(f"[ppr] Feil ved henting av PPR-data: {e}")
             raise
 
         last_snapshot = {}

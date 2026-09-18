@@ -2,8 +2,10 @@
 
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
+import discord
 import pytest
 import pytz
+import gspread.exceptions
 from gspread.exceptions import WorksheetNotFound
 
 from cogs.vestsk_tipping import VestskTipping
@@ -338,7 +340,9 @@ class TestLoadState:
     @pytest.mark.asyncio
     async def test_sheet_error_leaves_state_unloaded_for_retry(self):
         cog = make_cog()
-        cog._get_state_sheet = AsyncMock(side_effect=RuntimeError("nettverksfeil"))
+        cog._get_state_sheet = AsyncMock(
+            side_effect=gspread.exceptions.GSpreadException("nettverksfeil")
+        )
         cog._notify_admin = AsyncMock()
 
         await cog._load_state()
@@ -379,13 +383,32 @@ class TestSaveState:
     @pytest.mark.asyncio
     async def test_failure_sets_dirty_flag_and_notifies_admin(self):
         cog = make_cog(state_loaded=True, last_processed_week=3, last_posted_week=3)
-        cog._get_state_sheet = AsyncMock(side_effect=RuntimeError("Sheets nede"))
+        cog._get_state_sheet = AsyncMock(
+            side_effect=gspread.exceptions.GSpreadException("Sheets nede")
+        )
         cog._notify_admin = AsyncMock()
 
         saved = await cog._save_state()
 
         assert saved is False
         assert cog._state_dirty is True
+        cog._notify_admin.assert_awaited_once()
+
+
+class TestProcessPreviousWeek:
+    @pytest.mark.asyncio
+    async def test_notifies_admin_when_export_step_fails(self):
+        cog = make_cog(last_processed_week=2)
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.send = AsyncMock()
+        cog._export_impl = AsyncMock(side_effect=RuntimeError("Sheets nede"))
+        cog._resultater_impl = AsyncMock()
+        cog._save_state = AsyncMock(return_value=True)
+        cog._notify_admin = AsyncMock()
+
+        result = await cog._process_previous_week(current_week=4, channel=channel)
+
+        assert result is False
         cog._notify_admin.assert_awaited_once()
 
 
@@ -427,7 +450,10 @@ class TestFlushPendingState:
         cog = make_cog(state_loaded=True, last_processed_week=7, last_posted_week=7)
 
         state_ws = MagicMock()
-        state_ws.update.side_effect = [RuntimeError("Sheets API nede"), None]
+        state_ws.update.side_effect = [
+            gspread.exceptions.GSpreadException("Sheets API nede"),
+            None,
+        ]
         cog._get_state_sheet = AsyncMock(return_value=state_ws)
         cog._notify_admin = AsyncMock()
 
@@ -445,7 +471,9 @@ class TestFlushPendingState:
     @pytest.mark.asyncio
     async def test_stays_dirty_if_retry_also_fails(self):
         cog = make_cog(state_loaded=True, _state_dirty=True)
-        cog._get_state_sheet = AsyncMock(side_effect=RuntimeError("fortsatt nede"))
+        cog._get_state_sheet = AsyncMock(
+            side_effect=gspread.exceptions.GSpreadException("fortsatt nede")
+        )
         cog._notify_admin = AsyncMock()
 
         await cog._flush_pending_state()
