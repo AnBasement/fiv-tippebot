@@ -87,8 +87,11 @@ async def on_command_error(ctx, error):
 
     # Logg i terminal / Render
     print(f"[ERROR] Command: {ctx.command}, User: {ctx.author}, Error: {error}")
-    logging.getLogger(__name__).exception(
-        "Command error for %s: %s", ctx.command, error
+    logging.getLogger(__name__).error(
+        "Command error for %s: %s",
+        ctx.command,
+        error,
+        exc_info=(type(error), error, error.__traceback__),
     )
 
 
